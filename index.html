@@ -29,7 +29,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// Exponer al scope global para React
 window._FB = { auth, db, provider, signInWithPopup, signOut, onAuthStateChanged, doc, getDoc, setDoc, onSnapshot };
 window._FB_READY = true;
 window.dispatchEvent(new Event("fb_ready"));
@@ -66,7 +65,6 @@ input[type=date]{font-family:inherit;font-size:11px;border:0.5px solid #ddd;bord
 <body>
 <div id="root"></div>
 <script>
-// ── Esperar Firebase ──────────────────────────────────────────
 var R=React,h=R.createElement,useState=R.useState,useEffect=R.useEffect,
     useRef=R.useRef,useCallback=R.useCallback,useMemo=R.useMemo,Fragment=R.Fragment;
 
@@ -178,26 +176,29 @@ var scriptAutoPrint="<script>window.onload=function(){window.print();};<"+"\/scr
 var gc_pdf=function(p){return p>=91?"#1a6e2e":p>=81?"#2d7a3a":p>=71?"#b07d00":p>=61?"#b05a00":"#c0392b";};
 var gl_pdf=function(p){return p>=91?"Excelente":p>=81?"Muy Bueno":p>=71?"Bueno":p>=61?"Suficiente":"Requiere apoyo";};
 
-var cabeceraHTML=function(curso,titulo){
-  return"<div style='display:flex;align-items:center;background:#1a3a6a;color:#fff;border-radius:10px;padding:14px 18px;margin-bottom:16px'><div style='font-size:22px;margin-right:14px'>📚</div><div><div style='font-size:9px;letter-spacing:1.5px;opacity:.7;margin-bottom:2px'>REGISTRO PEDAGÓGICO DIGITAL</div><div style='font-size:15px;font-weight:700'>"+(curso.centroEducativo||"")+"</div><div style='font-size:11px;opacity:.85;margin-top:2px'>"+(curso.etapaCarrera||"")+" - "+(curso.nivel||"")+" - Gestión "+(curso.gestion||"")+"</div><div style='font-size:11px;opacity:.7;margin-top:1px;font-weight:600'>"+(curso.modulo||"")+" - "+titulo+"</div></div></div>";
+var cabeceraHTML=function(curso,titulo,logoUrl){
+  var logoEl=logoUrl
+    ?"<img src='"+logoUrl+"' style='width:48px;height:48px;border-radius:8px;object-fit:contain;margin-right:14px;background:rgba(255,255,255,.15);padding:2px'/>"
+    :"<div style='font-size:22px;margin-right:14px'>📚</div>";
+  return"<div style='display:flex;align-items:center;background:#1a3a6a;color:#fff;border-radius:10px;padding:14px 18px;margin-bottom:16px'>"+logoEl+"<div><div style='font-size:9px;letter-spacing:1.5px;opacity:.7;margin-bottom:2px'>REGISTRO PEDAGÓGICO DIGITAL</div><div style='font-size:15px;font-weight:700'>"+(curso.centroEducativo||"")+"</div><div style='font-size:11px;opacity:.85;margin-top:2px'>"+(curso.etapaCarrera||"")+" - "+(curso.nivel||"")+" - Gestión "+(curso.gestion||"")+"</div><div style='font-size:11px;opacity:.7;margin-top:1px;font-weight:600'>"+(curso.modulo||"")+" - "+titulo+"</div></div></div>";
 };
 
 var pieFirmaHTML=function(curso){
   return"<div style='display:grid;grid-template-columns:1fr 1fr;gap:40px;border-top:1px solid #aaa;padding-top:20px;margin-top:30px'><div style='text-align:center'><div style='border-top:1.5px solid #333;margin-top:40px;margin-bottom:6px'></div><b style='font-size:12px'>"+(curso.maestro||"__________________________")+"</b><div style='font-size:10px;color:#555;margin-top:3px'>"+(curso.cargoMaestro||"Maestro/a Responsable")+"</div></div><div style='text-align:center'><div style='border-top:1.5px solid #333;margin-top:40px;margin-bottom:6px'></div><b style='font-size:12px'>"+(curso.director||"__________________________")+"</b><div style='font-size:10px;color:#555;margin-top:3px'>"+(curso.cargoDirector||"Director(a)")+"</div></div></div>";
 };
 
-var exportarPDFAsistencia=function(curso,students,dias,asistencia){
+var exportarPDFAsistencia=function(curso,students,dias,asistencia,logoUrl){
   var studentsActivos=students.filter(function(s){return!esEstudianteRetirado(s.id,dias,asistencia);});
   var colDia=28,colNom=150,colCI=55,colPct=46,colNiv=72;
   var totalW=36+colNom+colCI+(dias.length*colDia)+colPct+colNiv;
   var diasHeader=dias.map(function(d){var base=d.replace(/\(\d+\)$/,"");var parts=base.split("/");var label=parts.length>=2?(parts[0]+"/"+parts[1]):base;return"<th style='width:"+colDia+"px;font-size:7.5px;text-align:center;padding:3px 1px;white-space:nowrap'>"+label+"</th>";}).join("");
   var rows=studentsActivos.map(function(s,i){var pct=calcNotaAsist(s.id,dias,asistencia);var celdas=dias.map(function(d){var ic=(asistencia[s.id]?asistencia[s.id][d]||"🟢":"🟢");var val=ICON_VALORES[ic];var bg=val===100?"#eaf3de":val>=90?"#faeeda":val>=40?"#fff3cd":"#fcebeb";return"<td style='text-align:center;background:"+bg+";font-size:12px;padding:2px 1px;width:"+colDia+"px'>"+ic+"</td>";}).join("");return"<tr style='background:"+(i%2===0?"#fff":"#f9fbff")+"'><td style='text-align:center;color:#aaa;font-size:9px;width:28px'>"+(i+1)+"</td><td style='font-weight:500;width:"+colNom+"px;font-size:10px'>"+s.nombre+"</td><td style='text-align:center;color:#888;width:"+colCI+"px;font-size:9px'>"+(s.ci||"")+"</td>"+celdas+"<td style='text-align:center;font-weight:700;color:"+gc_pdf(pct)+";width:"+colPct+"px;font-size:10px'>"+pct+"%</td><td style='text-align:center;color:"+gc_pdf(pct)+";font-size:8px;width:"+colNiv+"px'>"+gl_pdf(pct)+"</td></tr>";}).join("");
   var win=window.open("","_blank");
-  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Asistencia</title><style>table{width:"+totalW+"px}"+estilosPDF+"</style></head><body>"+cabeceraHTML(curso,"REGISTRO DE ASISTENCIA")+escalaHTML+"<table><thead><tr><th style='width:28px'>N</th><th style='text-align:left;width:"+colNom+"px'>Estudiante</th><th style='width:"+colCI+"px'>C.I.</th>"+diasHeader+"<th style='width:"+colPct+"px'>% Asist.</th><th style='width:"+colNiv+"px'>Nivel</th></tr></thead><tbody>"+rows+"</tbody></table>"+pieFirmaHTML(curso)+scriptAutoPrint+"</body></html>");
+  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Asistencia</title><style>table{width:"+totalW+"px}"+estilosPDF+"</style></head><body>"+cabeceraHTML(curso,"REGISTRO DE ASISTENCIA",logoUrl)+escalaHTML+"<table><thead><tr><th style='width:28px'>N</th><th style='text-align:left;width:"+colNom+"px'>Estudiante</th><th style='width:"+colCI+"px'>C.I.</th>"+diasHeader+"<th style='width:"+colPct+"px'>% Asist.</th><th style='width:"+colNiv+"px'>Nivel</th></tr></thead><tbody>"+rows+"</tbody></table>"+pieFirmaHTML(curso)+scriptAutoPrint+"</body></html>");
   win.document.close();
 };
 
-var exportarPDFEvaluacion=function(curso,students,acts,notas,asistencia,dias,asistPuntos){
+var exportarPDFEvaluacion=function(curso,students,acts,notas,asistencia,dias,asistPuntos,logoUrl){
   var studentsActivos=students.filter(function(s){return!esEstudianteRetirado(s.id,dias,asistencia);});
   var asistP=Number(asistPuntos)||ASIST_PUNTOS_DEFAULT;
   var colNom=150,colCI=52,colNum=28,colAct=Math.max(52,Math.min(80,Math.floor(360/Math.max(acts.length,1)))),colAsist=58,colFin=50,colNiv=70;
@@ -205,7 +206,7 @@ var exportarPDFEvaluacion=function(curso,students,acts,notas,asistencia,dias,asi
   var actsHeader=acts.map(function(a){return"<th style='width:"+colAct+"px;font-size:8px;text-align:center;padding:3px 2px'>"+a.nombre+"<br/><span style='font-weight:400;opacity:.85'>max "+pesoParsed(a.peso)+" pts</span></th>";}).join("");
   var rows=studentsActivos.map(function(s,i){var notaAsistPct=calcNotaAsist(s.id,dias,asistencia),ptsAsist=Math.round(notaAsistPct/100*asistP),nFin=calcNotaFinalV2(s.id,acts,notas,notaAsistPct,asistP);var celdas=acts.map(function(a){var pesoAct=pesoParsed(a.peso),val=notas[s.id]?notas[s.id][a.id]||0:0,pct=pesoAct>0?Math.round(val/pesoAct*100):0,bg=pct>=91?"#d4f0dc":pct>=81?"#eaf3de":pct>=71?"#faeeda":pct>=61?"#fde8d0":"#fcebeb";return"<td style='text-align:center;background:"+bg+";color:"+gc_pdf(pct)+";font-weight:600;width:"+colAct+"px;font-size:10px'>"+val+"/"+pesoAct+"</td>";}).join("");return"<tr style='background:"+(i%2===0?"#fff":"#f9fbff")+"'><td style='text-align:center;color:#aaa;width:"+colNum+"px;font-size:9px'>"+(i+1)+"</td><td style='font-weight:500;width:"+colNom+"px;font-size:10px'>"+s.nombre+"</td><td style='text-align:center;color:#888;width:"+colCI+"px;font-size:9px'>"+(s.ci||"")+"</td>"+celdas+"<td style='text-align:center;color:"+gc_pdf(notaAsistPct)+";font-weight:600;width:"+colAsist+"px;font-size:10px'>"+ptsAsist+"/"+asistP+"<br/><span style='font-size:8px;font-weight:400'>"+notaAsistPct+"%</span></td><td style='text-align:center;font-weight:700;font-size:13px;color:"+gc_pdf(nFin)+";width:"+colFin+"px'>"+nFin+"%</td><td style='text-align:center;color:"+gc_pdf(nFin)+";font-size:8.5px;width:"+colNiv+"px'>"+gl_pdf(nFin)+"</td></tr>";}).join("");
   var win=window.open("","_blank");
-  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Evaluacion</title><style>table{width:"+totalW+"px}"+estilosPDF+"</style></head><body>"+cabeceraHTML(curso,"REGISTRO DE EVALUACIÓN")+escalaHTML+"<table><thead><tr><th style='width:"+colNum+"px'>N</th><th style='text-align:left;width:"+colNom+"px'>Estudiante</th><th style='width:"+colCI+"px'>C.I.</th>"+actsHeader+"<th style='width:"+colAsist+"px;font-size:8px'>Asistencia<br/><span style='font-weight:400;opacity:.85'>max "+asistP+" pts</span></th><th style='width:"+colFin+"px'>Nota Final</th><th style='width:"+colNiv+"px;font-size:8px'>Nivel</th></tr></thead><tbody>"+rows+"</tbody></table>"+pieFirmaHTML(curso)+scriptAutoPrint+"</body></html>");
+  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Evaluacion</title><style>table{width:"+totalW+"px}"+estilosPDF+"</style></head><body>"+cabeceraHTML(curso,"REGISTRO DE EVALUACIÓN",logoUrl)+escalaHTML+"<table><thead><tr><th style='width:"+colNum+"px'>N</th><th style='text-align:left;width:"+colNom+"px'>Estudiante</th><th style='width:"+colCI+"px'>C.I.</th>"+actsHeader+"<th style='width:"+colAsist+"px;font-size:8px'>Asistencia<br/><span style='font-weight:400;opacity:.85'>max "+asistP+" pts</span></th><th style='width:"+colFin+"px'>Nota Final</th><th style='width:"+colNiv+"px;font-size:8px'>Nivel</th></tr></thead><tbody>"+rows+"</tbody></table>"+pieFirmaHTML(curso)+scriptAutoPrint+"</body></html>");
   win.document.close();
 };
 
@@ -310,7 +311,7 @@ function GestorAreas(props){
               h("span",{style:{fontSize:13}},"Nueva área"))))));
 }
 
-// ── REGISTRO AREA (simplificado con tabs principales) ─────────
+// ── REGISTRO AREA ─────────────────────────────────────────────
 function RegistroArea(props){
   var area=props.area,onUpdate=props.onUpdate,onBack=props.onBack,saving=props.saving,session=props.session;
   var st=useState(0);var tab=st[0],setTab=st[1];
@@ -321,6 +322,7 @@ function RegistroArea(props){
   var snd=useState("");var newDiaISO=snd[0],setNewDiaISO=snd[1];
   var sme=useState(false);var menuExport=sme[0],setMenuExport=sme[1];
   var exportRef=useRef(null);
+  var logoInputRef=useRef(null);
   var todayD=new Date();
   var todayMD=String(todayD.getDate()).padStart(2,"0")+"/"+String(todayD.getMonth()+1).padStart(2,"0");
 
@@ -328,9 +330,28 @@ function RegistroArea(props){
   var asistPuntos=Number(area.asistPuntos)||ASIST_PUNTOS_DEFAULT;
   var curso=area.curso,students=area.students,dias=area.dias,acts=area.acts;
   var asistencia=area.asistencia,notas=area.notas,obs=area.obs||{};
+  var logoUrl=area.logoUrl||"";
   var totalPesos=acts.reduce(function(a,x){return a+pesoParsed(x.peso);},0)+asistPuntos;
 
   var upd=useCallback(function(fn){onUpdate(function(prev){var delta=fn(prev);return Object.assign({},prev,delta);});},[onUpdate]);
+
+  // ── SUBIR LOGO: convierte imagen a base64 y guarda en Firebase ──
+  var handleLogoUpload=function(e){
+    var file=e.target.files[0];
+    if(!file)return;
+    if(file.size>500000){alert("El logo debe pesar menos de 500 KB. Usa una imagen más pequeña.");e.target.value="";return;}
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var base64=ev.target.result;
+      upd(function(){return{logoUrl:base64};});
+    };
+    reader.readAsDataURL(file);
+    e.target.value="";
+  };
+
+  var removeLogo=function(){
+    if(window.confirm("¿Quitar el logo?"))upd(function(){return{logoUrl:""};});
+  };
 
   var getAsist=function(sid,d){return asistencia[sid]?asistencia[sid][d]||"🟢":"🟢";};
   var setAsist=function(sid,d,v){upd(function(p){var na=Object.assign({},p.asistencia);na[sid]=Object.assign({},na[sid]||{});na[sid][d]=v;return{asistencia:na};});};
@@ -382,20 +403,38 @@ function RegistroArea(props){
         h("button",{onClick:function(){setMenuExport(function(v){return!v;});},style:{padding:"6px 14px",fontSize:13,borderRadius:7,border:"0.5px solid #2d7a3a",background:"#eaf3de",color:"#2d7a3a",cursor:"pointer",fontWeight:600}},"⬇ Exportar"),
         menuExport&&h("div",{style:{position:"absolute",top:"110%",right:0,background:"#fff",border:"1px solid #ddd",borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.13)",zIndex:999,minWidth:220,padding:"6px 0"}},
           h("button",{onClick:function(){setMenuExport(false);exportarExcel();},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#3266ad"}},"📊 Excel (.xlsx)"),
-          h("button",{onClick:function(){setMenuExport(false);exportarPDFAsistencia(curso,sortedStudents,dias,asistencia);},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#185fa5"}},"📋 PDF Asistencia"),
-          h("button",{onClick:function(){setMenuExport(false);exportarPDFEvaluacion(curso,sortedStudents,acts,notas,asistencia,dias,asistPuntos);},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#7b3fa0"}},"📝 PDF Evaluación"))),
+          h("button",{onClick:function(){setMenuExport(false);exportarPDFAsistencia(curso,sortedStudents,dias,asistencia,logoUrl);},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#185fa5"}},"📋 PDF Asistencia"),
+          h("button",{onClick:function(){setMenuExport(false);exportarPDFEvaluacion(curso,sortedStudents,acts,notas,asistencia,dias,asistPuntos,logoUrl);},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#7b3fa0"}},"📝 PDF Evaluación"))),
       h("div",{style:{flex:1,height:4,borderRadius:4,background:area.color,opacity:.4}})),
 
+    // ── ENCABEZADO con logo personalizable ──
     h("div",{style:{background:area.color,borderRadius:12,padding:"14px 18px",marginBottom:10,color:"#fff",position:"relative"}},
       editCurso
-      ?h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
-          [["centroEducativo","Centro Educativo"],["etapaCarrera","Etapa/Carrera"],["nivel","Nivel"],["maestro","Maestro/a"],["director","Director/a"],["gestion","Gestión"],["modulo","Módulo/Área"]].map(function(item){return h("div",{key:item[0]},h("div",{style:{fontSize:10,opacity:.7,marginBottom:2}},item[1]),h("input",{value:draftCurso[item[0]]||"",onChange:function(e){var val=e.target.value;setDraftCurso(function(p){return Object.assign({},p,kv(item[0],val));});},style:{width:"100%",fontSize:12,borderRadius:6,border:"1px solid rgba(255,255,255,.4)",background:"rgba(255,255,255,.15)",color:"#fff",padding:"4px 8px",boxSizing:"border-box"}}));}),
-          h("div",{style:{gridColumn:"span 2",display:"flex",gap:8,marginTop:4}},
+      ?h("div",null,
+          h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}},
+            [["centroEducativo","Centro Educativo"],["etapaCarrera","Etapa/Carrera"],["nivel","Nivel"],["maestro","Maestro/a"],["director","Director/a"],["gestion","Gestión"],["modulo","Módulo/Área"]].map(function(item){return h("div",{key:item[0]},h("div",{style:{fontSize:10,opacity:.7,marginBottom:2}},item[1]),h("input",{value:draftCurso[item[0]]||"",onChange:function(e){var val=e.target.value;setDraftCurso(function(p){return Object.assign({},p,kv(item[0],val));});},style:{width:"100%",fontSize:12,borderRadius:6,border:"1px solid rgba(255,255,255,.4)",background:"rgba(255,255,255,.15)",color:"#fff",padding:"4px 8px",boxSizing:"border-box"}}));})),
+          // ── Sección de logo dentro del formulario Editar ──
+          h("div",{style:{background:"rgba(255,255,255,.15)",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid rgba(255,255,255,.3)"}},
+            h("div",{style:{fontSize:11,opacity:.8,marginBottom:8,fontWeight:600}},"🖼 Logo del Instituto"),
+            h("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},
+              logoUrl
+              ?h("img",{src:logoUrl,style:{width:56,height:56,borderRadius:8,objectFit:"contain",background:"rgba(255,255,255,.9)",padding:4}})
+              :h("div",{style:{width:56,height:56,borderRadius:8,background:"rgba(255,255,255,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}},"📚"),
+              h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+                h("label",{style:{cursor:"pointer"}},
+                  h("span",{style:{padding:"5px 12px",borderRadius:7,background:"#fff",color:area.color,fontSize:12,fontWeight:600,cursor:"pointer"}},"📂 "+(logoUrl?"Cambiar logo":"Subir logo")),
+                  h("input",{ref:logoInputRef,type:"file",accept:"image/*",style:{display:"none"},onChange:handleLogoUpload})),
+                logoUrl&&h("button",{onClick:removeLogo,style:{padding:"4px 10px",borderRadius:7,border:"1px solid rgba(255,255,255,.4)",background:"transparent",color:"#fff",fontSize:11,cursor:"pointer"}},"🗑 Quitar logo")),
+              h("div",{style:{fontSize:10,opacity:.7}},"PNG, JPG · máx. 500 KB"))),
+          h("div",{style:{display:"flex",gap:8,marginTop:4}},
             h("button",{onClick:function(){upd(function(){return{curso:draftCurso};});setEditCurso(false);},style:{padding:"5px 14px",borderRadius:7,border:"none",background:"#fff",color:area.color,fontWeight:600,cursor:"pointer",fontSize:12}},"Guardar"),
             h("button",{onClick:function(){setEditCurso(false);},style:{padding:"5px 14px",borderRadius:7,border:"1px solid rgba(255,255,255,.4)",background:"transparent",color:"#fff",cursor:"pointer",fontSize:12}},"Cancelar")))
       :h(Fragment,null,
           h("div",{style:{display:"flex",alignItems:"center",gap:14}},
-            h("div",{style:{fontSize:32}},"📚"),
+            // Muestra logo o emoji 📚
+            logoUrl
+            ?h("img",{src:logoUrl,style:{width:52,height:52,borderRadius:8,objectFit:"contain",background:"rgba(255,255,255,.15)",padding:3,flexShrink:0}})
+            :h("div",{style:{fontSize:32,flexShrink:0}},"📚"),
             h("div",{style:{flex:1}},
               h("div",{style:{fontSize:10,opacity:.7,letterSpacing:1,marginBottom:2}},"REGISTRO PEDAGÓGICO DIGITAL"),
               h("div",{style:{fontSize:16,fontWeight:600}},curso.centroEducativo),
@@ -555,7 +594,6 @@ function App(){
   var saveTimer=useRef(null);
   var pendingAreas=useRef(null);
 
-  // Esperar Firebase
   useEffect(function(){
     if(window._FB_READY){setFbReady(true);return;}
     var h2=function(){setFbReady(true);};
@@ -563,7 +601,6 @@ function App(){
     return function(){window.removeEventListener("fb_ready",h2);};
   },[]);
 
-  // Auth listener
   useEffect(function(){
     if(!fbReady)return;
     var FB=window._FB;
