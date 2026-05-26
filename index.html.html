@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>Registro Pedagógico Digital</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Firebase SDKs -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBLCMhLBDMHOwjgMgLt7RdCnxaGsci1oIs",
+  authDomain: "registro-ped-plus-v2.firebaseapp.com",
+  projectId: "registro-ped-plus-v2",
+  storageBucket: "registro-ped-plus-v2.firebasestorage.app",
+  messagingSenderId: "1093576492094",
+  appId: "1:1093576492094:web:8957741596b775231f3d6f"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+// Exponer al scope global para React
+window._FB = { auth, db, provider, signInWithPopup, signOut, onAuthStateChanged, doc, getDoc, setDoc, onSnapshot };
+window._FB_READY = true;
+window.dispatchEvent(new Event("fb_ready"));
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f4f6fa;color:#1a1a1a;min-height:100vh}
+input,select,textarea,button{font-family:inherit}
+::-webkit-scrollbar{height:6px;width:6px}
+::-webkit-scrollbar-track{background:#f0f0f0}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+.saving{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+input[type=date]{font-family:inherit;font-size:11px;border:0.5px solid #ddd;border-radius:5px;padding:2px 4px;background:#fff;color:#1a1a1a;cursor:pointer}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a3a6a 0%,#3266ad 100%)}
+.login-card{background:#fff;border-radius:16px;padding:32px 28px;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.hover-card{transition:box-shadow .15s,transform .15s}
+.hover-card:hover{box-shadow:0 4px 18px rgba(50,102,173,.13);transform:translateY(-1px)}
+.freeze-table{border-collapse:separate;border-spacing:0;font-size:11px}
+.freeze-table .col-num{position:sticky;left:0;z-index:3;background:#fff;min-width:26px}
+.freeze-table .col-name{position:sticky;left:26px;z-index:3;background:#fff;min-width:140px;max-width:160px}
+.freeze-table thead .col-num,.freeze-table thead .col-name{background:#f0f2f5;z-index:4}
+.freeze-table td,.freeze-table th{border-bottom:0.5px solid #eee}
+.nota-inp{width:52px;text-align:center;font-size:11px;border:1px solid #ddd;border-radius:5px;padding:2px 3px;background:#fff;transition:border-color .15s,box-shadow .15s}
+.nota-inp:focus{border-color:#3266ad;box-shadow:0 0 0 2px #3266ad22;outline:none}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-box{background:#fff;border-radius:16px;width:100%;max-width:820px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.22)}
+.retirado-row{opacity:0.55;background:repeating-linear-gradient(135deg,#f9f9f9,#f9f9f9 4px,#f4f4f4 4px,#f4f4f4 8px)!important}
+@media print{.no-print{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ── Esperar Firebase ──────────────────────────────────────────
+var R=React,h=R.createElement,useState=R.useState,useEffect=R.useEffect,
+    useRef=R.useRef,useCallback=R.useCallback,useMemo=R.useMemo,Fragment=R.Fragment;
+
+var ICON_VALORES={"🟢":100,"🔵":100,"🟡":90,"🔴":40,"⚫":20,"⭕":null};
+var ICON_LIST=["🟢","🔴","🟡","🔵","⚫","⭕"];
+var ICON_LABELS={"🟢":"Asistencia (100%)","🔴":"Falta (40%)","🟡":"Retardo (90%)","🔵":"Lic. justif. (100%)","⚫":"Lic. injustif. (20%)","⭕":"Retirado (excluido)"};
+var ICON_ES_RETIRADO=function(ic){return ic==="⭕";};
+var ACT_COLORS=["#3266ad","#2d7a3a","#b07d00","#7b3fa0","#c0392b","#0e7c7b","#d4682a","#185fa5"];
+var MONTHS=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+var WDAYS=["Dom","Lun","Mar","Mie","Jue","Vie","Sab"];
+var DOC_TIPOS=["Plan de Modulo","Plan Anual","Plan de Desarrollo Curricular","POA","Proyecto Productivo"];
+var TABS=["Inicio","Asistencia","Evaluacion","Resumen","Estadisticas","Informe","Planificacion","Tareas","Calendario","Filiacion","Centralizador"];
+var ASIST_PUNTOS_DEFAULT=10;
+var gradeColor=function(p){return p>=91?"#1a6e2e":p>=81?"#2d7a3a":p>=71?"#b07d00":p>=61?"#b05a00":"#c0392b";};
+var gradeBg=function(p){return p>=91?"#d4f0dc":p>=81?"#eaf3de":p>=71?"#faeeda":p>=61?"#fde8d0":"#fcebeb";};
+var gradeLabel=function(p){return p>=91?"Excelente":p>=81?"Muy Bueno":p>=71?"Bueno":p>=61?"Suficiente":"Requiere apoyo";};
+var CARGO_MAESTRO=["Maestro/a Responsable","Docente","Tutor/a","Facilitador/a","Instructor/a","Profesor/a"];
+var CARGO_DIRECTOR=["Director(a) del Centro Educativo","Director/a Academico/a","Director/a General","Director/a Administrativo/a","Rector/a","Coordinador/a Academico/a"];
+
+var mkId=function(){return Math.random().toString(36).slice(2,8);};
+var todayStr=function(){var d=new Date();return d.getDate()+"/"+(d.getMonth()+1)+"/"+String(d.getFullYear()).slice(2);};
+var isoToFull=function(iso){if(!iso)return"";var p=iso.split("-");return p[2]+"/"+p[1]+"/"+p[0];};
+var pesoParsed=function(p){return parseFloat(String(p).replace(",","."))||1;};
+var normMatch=function(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();};
+var kv=function(k,v){var o={};o[k]=v;return o;};
+
+var diaKeyToISO=function(d){
+  var base=d.replace(/\(\d+\)$/,"");var p=base.split("/");
+  if(p.length===3){var yy=parseInt(p[2]);var yyyy=yy<100?2000+yy:yy;return yyyy+"-"+String(parseInt(p[1])).padStart(2,"0")+"-"+String(parseInt(p[0])).padStart(2,"0");}
+  return"";
+};
+
+var calcNotaAsist=function(sid,dias,asistencia){
+  var diasActivos=dias.filter(function(d){var ic=asistencia[sid]?asistencia[sid][d]||"🟢":"🟢";return!ICON_ES_RETIRADO(ic);});
+  if(!diasActivos.length)return 100;
+  var vals=diasActivos.map(function(d){return ICON_VALORES[asistencia[sid]?asistencia[sid][d]||"🟢":"🟢"]||100;});
+  return Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length);
+};
+
+var esEstudianteRetirado=function(sid,dias,asistencia){
+  if(!dias.length)return false;
+  var retirados=dias.filter(function(d){return(asistencia[sid]?asistencia[sid][d]:"🟢")==="⭕";}).length;
+  return retirados>dias.length/2;
+};
+
+var calcNotaFinalV2=function(sid,acts,notas,notaAsistPct,asistPuntos){
+  var ap=Number(asistPuntos)||ASIST_PUNTOS_DEFAULT;
+  var totalPesos=acts.reduce(function(a,x){return a+pesoParsed(x.peso);},0)+ap;
+  if(!totalPesos)return 0;
+  var suma=acts.reduce(function(a,x){return a+(notas[sid]?notas[sid][x.id]||0:0);},0);
+  suma+=(notaAsistPct/100)*ap;
+  return Math.round(suma/totalPesos*100);
+};
+
+var calcNotaAcadV2=function(sid,acts,notas){
+  var totalPesos=acts.reduce(function(a,x){return a+pesoParsed(x.peso);},0);
+  if(!totalPesos)return 0;
+  return Math.round(acts.reduce(function(a,x){return a+(notas[sid]?notas[sid][x.id]||0:0);},0)/totalPesos*100);
+};
+
+var mkFil=function(){return{apellidoP:"",apellidoM:"",nombres:"",fechaNac:"",telefono:"",email:"",comunidad:"",direccion:"",apoderado:"",telApoderado:"",obs:""};};
+
+var mkArea=function(nombre,maestroNombre){
+  return{
+    id:mkId(),color:ACT_COLORS[Math.floor(Math.random()*ACT_COLORS.length)],
+    curso:{centroEducativo:"Centro Educativo",etapaCarrera:"Tecnico en Gestion Empresarial",nivel:"Nivel II",maestro:maestroNombre||"",director:"",gestion:"2025",modulo:nombre,cargoMaestro:CARGO_MAESTRO[0],cargoDirector:CARGO_DIRECTOR[0]},
+    students:[],dias:[],
+    acts:[
+      {id:mkId(),nombre:"Actividad 1",tipo:"Practica",peso:"20"},
+      {id:mkId(),nombre:"Actividad 2",tipo:"Teorica",peso:"30"},
+      {id:mkId(),nombre:"Actividad 3",tipo:"Examen",peso:"40"}
+    ],
+    asistPuntos:String(ASIST_PUNTOS_DEFAULT),asistencia:{},notas:{},obs:{},filiacion:{},tareas:[],
+    documentos:DOC_TIPOS.map(function(t){return{id:mkId(),tipo:t,nombre:"",descripcion:"",fechaInicio:"",fechaFin:"",urlPlan:""};})
+  };
+};
+
+var migrateArea=function(m,maestroNombre){
+  return Object.assign({filiacion:{},tareas:[],documentos:DOC_TIPOS.map(function(t){return{id:mkId(),tipo:t,nombre:"",descripcion:"",fechaInicio:"",fechaFin:"",urlPlan:""};})},m,{asistPuntos:m.asistPuntos||String(ASIST_PUNTOS_DEFAULT),dias:m.dias||[],acts:m.acts||[],asistencia:m.asistencia||{},notas:m.notas||{},curso:Object.assign({director:"",centroEducativo:"Centro Educativo",etapaCarrera:"",maestro:maestroNombre||"",cargoMaestro:CARGO_MAESTRO[0],cargoDirector:CARGO_DIRECTOR[0]},m.curso||{})});
+};
+
+var leerArchivoExcel=function(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        var rows=[];
+        if(file.name.endsWith(".csv")){var lines=ev.target.result.trim().split(/\r?\n/);var headers=lines[0].split(/[,;|\t]/);rows=lines.slice(1).map(function(l){var vals=l.split(/[,;|\t]/);var obj={};headers.forEach(function(hh,i){obj[hh.trim()]=vals[i]?vals[i].trim():"";});return obj;});}
+        else{var wb=XLSX.read(ev.target.result,{type:"binary"});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});}
+        resolve(rows);
+      }catch(err){reject(err);}
+    };
+    reader.onerror=function(){reject(new Error("No se pudo leer el archivo."));};
+    if(file.name.endsWith(".csv"))reader.readAsText(file);else reader.readAsBinaryString(file);
+  });
+};
+
+var parseEstudiantes=function(rows){
+  var norm=function(s){return String(s||"").trim();};
+  var keys0=Object.keys(rows[0]||{});
+  var colN=keys0.find(function(k){return/nombre|name|alumno|estudiante/i.test(k);})||keys0[0];
+  var colCI=keys0.find(function(k){return/ci|c\.i|cedula|id|documento/i.test(k);})||keys0[1];
+  return rows.filter(function(r){return norm(r[colN]);}).map(function(r){return{id:mkId(),nombre:norm(r[colN]),ci:norm(r[colCI]||"")};});
+};
+
+var estilosPDF="body{font-family:Arial,Helvetica,sans-serif;font-size:10px;margin:12px;color:#1a1a1a}table{border-collapse:collapse}th{background:#1a3a6a;color:#fff;padding:4px 3px;font-size:8px;text-align:center}td{padding:3px 4px;border-bottom:0.5px solid #eee}@media print{body{margin:8px}@page{size:landscape;margin:8mm}}";
+var escalaHTML="<div style='background:#f7f8fa;border-radius:6px;padding:5px 10px;margin-bottom:10px;border:0.5px solid #ddd;font-size:8.5px;color:#555;display:flex;gap:10px;flex-wrap:wrap'><b>Escala:</b><span style='color:#1a6e2e;font-weight:600'>91-100: Excelente</span><span style='color:#2d7a3a;font-weight:600'>81-90: Muy Bueno</span><span style='color:#b07d00;font-weight:600'>71-80: Bueno</span><span style='color:#b05a00;font-weight:600'>61-70: Suficiente</span><span style='color:#c0392b;font-weight:600'>0-60: Requiere apoyo</span></div>";
+var scriptAutoPrint="<script>window.onload=function(){window.print();};<"+"\/script>";
+var gc_pdf=function(p){return p>=91?"#1a6e2e":p>=81?"#2d7a3a":p>=71?"#b07d00":p>=61?"#b05a00":"#c0392b";};
+var gl_pdf=function(p){return p>=91?"Excelente":p>=81?"Muy Bueno":p>=71?"Bueno":p>=61?"Suficiente":"Requiere apoyo";};
+
+var cabeceraHTML=function(curso,titulo){
+  return"<div style='display:flex;align-items:center;background:#1a3a6a;color:#fff;border-radius:10px;padding:14px 18px;margin-bottom:16px'><div style='font-size:22px;margin-right:14px'>📚</div><div><div style='font-size:9px;letter-spacing:1.5px;opacity:.7;margin-bottom:2px'>REGISTRO PEDAGÓGICO DIGITAL</div><div style='font-size:15px;font-weight:700'>"+(curso.centroEducativo||"")+"</div><div style='font-size:11px;opacity:.85;margin-top:2px'>"+(curso.etapaCarrera||"")+" - "+(curso.nivel||"")+" - Gestión "+(curso.gestion||"")+"</div><div style='font-size:11px;opacity:.7;margin-top:1px;font-weight:600'>"+(curso.modulo||"")+" - "+titulo+"</div></div></div>";
+};
+
+var pieFirmaHTML=function(curso){
+  return"<div style='display:grid;grid-template-columns:1fr 1fr;gap:40px;border-top:1px solid #aaa;padding-top:20px;margin-top:30px'><div style='text-align:center'><div style='border-top:1.5px solid #333;margin-top:40px;margin-bottom:6px'></div><b style='font-size:12px'>"+(curso.maestro||"__________________________")+"</b><div style='font-size:10px;color:#555;margin-top:3px'>"+(curso.cargoMaestro||"Maestro/a Responsable")+"</div></div><div style='text-align:center'><div style='border-top:1.5px solid #333;margin-top:40px;margin-bottom:6px'></div><b style='font-size:12px'>"+(curso.director||"__________________________")+"</b><div style='font-size:10px;color:#555;margin-top:3px'>"+(curso.cargoDirector||"Director(a)")+"</div></div></div>";
+};
+
+var exportarPDFAsistencia=function(curso,students,dias,asistencia){
+  var studentsActivos=students.filter(function(s){return!esEstudianteRetirado(s.id,dias,asistencia);});
+  var colDia=28,colNom=150,colCI=55,colPct=46,colNiv=72;
+  var totalW=36+colNom+colCI+(dias.length*colDia)+colPct+colNiv;
+  var diasHeader=dias.map(function(d){var base=d.replace(/\(\d+\)$/,"");var parts=base.split("/");var label=parts.length>=2?(parts[0]+"/"+parts[1]):base;return"<th style='width:"+colDia+"px;font-size:7.5px;text-align:center;padding:3px 1px;white-space:nowrap'>"+label+"</th>";}).join("");
+  var rows=studentsActivos.map(function(s,i){var pct=calcNotaAsist(s.id,dias,asistencia);var celdas=dias.map(function(d){var ic=(asistencia[s.id]?asistencia[s.id][d]||"🟢":"🟢");var val=ICON_VALORES[ic];var bg=val===100?"#eaf3de":val>=90?"#faeeda":val>=40?"#fff3cd":"#fcebeb";return"<td style='text-align:center;background:"+bg+";font-size:12px;padding:2px 1px;width:"+colDia+"px'>"+ic+"</td>";}).join("");return"<tr style='background:"+(i%2===0?"#fff":"#f9fbff")+"'><td style='text-align:center;color:#aaa;font-size:9px;width:28px'>"+(i+1)+"</td><td style='font-weight:500;width:"+colNom+"px;font-size:10px'>"+s.nombre+"</td><td style='text-align:center;color:#888;width:"+colCI+"px;font-size:9px'>"+(s.ci||"")+"</td>"+celdas+"<td style='text-align:center;font-weight:700;color:"+gc_pdf(pct)+";width:"+colPct+"px;font-size:10px'>"+pct+"%</td><td style='text-align:center;color:"+gc_pdf(pct)+";font-size:8px;width:"+colNiv+"px'>"+gl_pdf(pct)+"</td></tr>";}).join("");
+  var win=window.open("","_blank");
+  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Asistencia</title><style>table{width:"+totalW+"px}"+estilosPDF+"</style></head><body>"+cabeceraHTML(curso,"REGISTRO DE ASISTENCIA")+escalaHTML+"<table><thead><tr><th style='width:28px'>N</th><th style='text-align:left;width:"+colNom+"px'>Estudiante</th><th style='width:"+colCI+"px'>C.I.</th>"+diasHeader+"<th style='width:"+colPct+"px'>% Asist.</th><th style='width:"+colNiv+"px'>Nivel</th></tr></thead><tbody>"+rows+"</tbody></table>"+pieFirmaHTML(curso)+scriptAutoPrint+"</body></html>");
+  win.document.close();
+};
+
+var exportarPDFEvaluacion=function(curso,students,acts,notas,asistencia,dias,asistPuntos){
+  var studentsActivos=students.filter(function(s){return!esEstudianteRetirado(s.id,dias,asistencia);});
+  var asistP=Number(asistPuntos)||ASIST_PUNTOS_DEFAULT;
+  var colNom=150,colCI=52,colNum=28,colAct=Math.max(52,Math.min(80,Math.floor(360/Math.max(acts.length,1)))),colAsist=58,colFin=50,colNiv=70;
+  var totalW=colNum+colNom+colCI+(acts.length*colAct)+colAsist+colFin+colNiv;
+  var actsHeader=acts.map(function(a){return"<th style='width:"+colAct+"px;font-size:8px;text-align:center;padding:3px 2px'>"+a.nombre+"<br/><span style='font-weight:400;opacity:.85'>max "+pesoParsed(a.peso)+" pts</span></th>";}).join("");
+  var rows=studentsActivos.map(function(s,i){var notaAsistPct=calcNotaAsist(s.id,dias,asistencia),ptsAsist=Math.round(notaAsistPct/100*asistP),nFin=calcNotaFinalV2(s.id,acts,notas,notaAsistPct,asistP);var celdas=acts.map(function(a){var pesoAct=pesoParsed(a.peso),val=notas[s.id]?notas[s.id][a.id]||0:0,pct=pesoAct>0?Math.round(val/pesoAct*100):0,bg=pct>=91?"#d4f0dc":pct>=81?"#eaf3de":pct>=71?"#faeeda":pct>=61?"#fde8d0":"#fcebeb";return"<td style='text-align:center;background:"+bg+";color:"+gc_pdf(pct)+";font-weight:600;width:"+colAct+"px;font-size:10px'>"+val+"/"+pesoAct+"</td>";}).join("");return"<tr style='background:"+(i%2===0?"#fff":"#f9fbff")+"'><td style='text-align:center;color:#aaa;width:"+colNum+"px;font-size:9px'>"+(i+1)+"</td><td style='font-weight:500;width:"+colNom+"px;font-size:10px'>"+s.nombre+"</td><td style='text-align:center;color:#888;width:"+colCI+"px;font-size:9px'>"+(s.ci||"")+"</td>"+celdas+"<td style='text-align:center;color:"+gc_pdf(notaAsistPct)+";font-weight:600;width:"+colAsist+"px;font-size:10px'>"+ptsAsist+"/"+asistP+"<br/><span style='font-size:8px;font-weight:400'>"+notaAsistPct+"%</span></td><td style='text-align:center;font-weight:700;font-size:13px;color:"+gc_pdf(nFin)+";width:"+colFin+"px'>"+nFin+"%</td><td style='text-align:center;color:"+gc_pdf(nFin)+";font-size:8.5px;width:"+colNiv+"px'>"+gl_pdf(nFin)+"</td></tr>";}).join("");
+  var win=window.open("","_blank");
+  win.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Evaluacion</title><style>table{width:"+totalW+"px}"+estilosPDF+"</style></head><body>"+cabeceraHTML(curso,"REGISTRO DE EVALUACIÓN")+escalaHTML+"<table><thead><tr><th style='width:"+colNum+"px'>N</th><th style='text-align:left;width:"+colNom+"px'>Estudiante</th><th style='width:"+colCI+"px'>C.I.</th>"+actsHeader+"<th style='width:"+colAsist+"px;font-size:8px'>Asistencia<br/><span style='font-weight:400;opacity:.85'>max "+asistP+" pts</span></th><th style='width:"+colFin+"px'>Nota Final</th><th style='width:"+colNiv+"px;font-size:8px'>Nivel</th></tr></thead><tbody>"+rows+"</tbody></table>"+pieFirmaHTML(curso)+scriptAutoPrint+"</body></html>");
+  win.document.close();
+};
+
+var Btn=function(p){return h("button",{onClick:p.onClick,title:p.title,disabled:p.disabled,style:{padding:p.small?"3px 8px":"6px 14px",fontSize:p.small?11:13,borderRadius:7,border:"0.5px solid "+(p.danger?"#c0392b":p.accent?"#3266ad":p.success?"#2d7a3a":"#ccc"),background:p.accent?"#3266ad":p.danger?"#fcebeb":p.success?"#eaf3de":"#fff",color:p.accent?"#fff":p.danger?"#c0392b":p.success?"#2d7a3a":"#1a1a1a",cursor:p.disabled?"not-allowed":"pointer",opacity:p.disabled?.5:1,whiteSpace:"nowrap"}},p.children);};
+
+var TInput=function(p){return h("input",{value:p.value||"",onChange:function(e){p.onChange(e.target.value);},placeholder:p.placeholder,style:Object.assign({fontSize:13,borderRadius:7,border:"0.5px solid #ddd",padding:"4px 8px",background:"#fff",color:"#1a1a1a",width:"100%",boxSizing:"border-box"},p.style||{})});};
+
+var mc=function(label,val,color){return h("div",{style:{background:"#f7f8fa",borderRadius:7,padding:"6px 10px",flex:1,minWidth:90}},h("div",{style:{fontSize:11,color:"#888",marginBottom:2}},label),h("div",{style:{fontSize:18,fontWeight:600,color:color||"#1a1a1a"}},val));};
+
+var card={background:"#fff",border:"0.5px solid #e0e0e0",borderRadius:12,padding:"10px 14px",marginBottom:10};
+var cardStyle=function(extra){return Object.assign({},card,extra||{});};
+
+var pieFirmaEl=function(curso,upd){
+  return h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24,borderTop:"0.5px solid #ddd",paddingTop:20,marginTop:16}},
+    h("div",{style:{textAlign:"center"}},
+      h("input",{value:curso.maestro||"",onChange:function(e){upd(function(){return{curso:Object.assign({},curso,{maestro:e.target.value})};});},style:{textAlign:"center",fontSize:12,fontWeight:600,border:"none",borderBottom:"1px solid #555",background:"transparent",width:"90%",padding:"2px 4px",outline:"none"}}),
+      h("select",{value:curso.cargoMaestro||CARGO_MAESTRO[0],onChange:function(e){upd(function(){return{curso:Object.assign({},curso,{cargoMaestro:e.target.value})};});},style:{marginTop:5,fontSize:11,color:"#555",border:"0.5px solid #ddd",borderRadius:5,padding:"2px 6px",background:"#fff",cursor:"pointer",width:"90%"}},CARGO_MAESTRO.map(function(c){return h("option",{key:c,value:c},c);}))),
+    h("div",{style:{textAlign:"center"}},
+      h("input",{value:curso.director||"",onChange:function(e){upd(function(){return{curso:Object.assign({},curso,{director:e.target.value})};});},placeholder:"Nombre Director/a",style:{textAlign:"center",fontSize:12,fontWeight:600,border:"none",borderBottom:"1px solid #555",background:"transparent",width:"90%",padding:"2px 4px",outline:"none"}}),
+      h("select",{value:curso.cargoDirector||CARGO_DIRECTOR[0],onChange:function(e){upd(function(){return{curso:Object.assign({},curso,{cargoDirector:e.target.value})};});},style:{marginTop:5,fontSize:11,color:"#555",border:"0.5px solid #ddd",borderRadius:5,padding:"2px 6px",background:"#fff",cursor:"pointer",width:"90%"}},CARGO_DIRECTOR.map(function(c){return h("option",{key:c,value:c},c);}))));
+};
+
+// ── LOGIN SCREEN ──────────────────────────────────────────────
+function LoginScreen(props){
+  var onGoogle=props.onGoogle,loading=props.loading,error=props.error;
+  return h("div",{className:"login-wrap"},
+    h("div",{className:"login-card"},
+      h("div",{style:{textAlign:"center",marginBottom:24}},
+        h("div",{style:{fontSize:52,marginBottom:8}},"📚"),
+        h("div",{style:{fontSize:18,fontWeight:700,color:"#1a3a6a"}},"Registro Pedagógico Digital"),
+        h("div",{style:{fontSize:12,color:"#aaa",marginTop:6}},"Tus datos guardados de forma segura en la nube")),
+      h("div",{style:{background:"#f0f7ff",borderRadius:10,padding:"14px",border:"1px solid #b5d4f4",marginBottom:20,fontSize:12,color:"#1a3a6a"}},
+        h("div",{style:{fontWeight:700,marginBottom:6}},"☁️ Ventajas de la versión en la nube:"),
+        h("div",null,"✅ Accede desde cualquier dispositivo"),
+        h("div",null,"✅ Datos seguros aunque falle tu PC"),
+        h("div",null,"✅ Sincronización automática"),
+        h("div",null,"✅ Solo tú ves tu información")),
+      error&&h("div",{style:{background:"#fcebeb",color:"#c0392b",borderRadius:7,padding:"8px 12px",fontSize:12,marginBottom:14}},"⚠️ "+error),
+      h("button",{onClick:onGoogle,disabled:loading,style:{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid #ddd",background:loading?"#f0f0f0":"#fff",color:"#1a1a1a",fontWeight:600,fontSize:14,cursor:loading?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:"0 2px 8px rgba(0,0,0,.08)"}},
+        h("svg",{width:20,height:20,viewBox:"0 0 48 48"},
+          h("path",{fill:"#FFC107",d:"M43.6 20H24v8h11.3C33.6 33.1 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C33.8 6.5 29.1 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 20-9 20-20 0-1.3-.1-2.7-.4-4z"}),
+          h("path",{fill:"#FF3D00",d:"M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C33.8 6.5 29.1 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"}),
+          h("path",{fill:"#4CAF50",d:"M24 44c5.2 0 9.8-1.7 13.4-4.7l-6.2-5.2C29.3 35.6 26.8 36 24 36c-5.3 0-9.6-2.9-11.3-7l-6.5 5C9.6 39.6 16.3 44 24 44z"}),
+          h("path",{fill:"#1976D2",d:"M43.6 20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.5l6.2 5.2C40.3 35.3 44 30.1 44 24c0-1.3-.1-2.7-.4-4z"})),
+        loading?"Iniciando sesión...":"Continuar con Google"),
+      h("div",{style:{fontSize:10,color:"#bbb",textAlign:"center",marginTop:14}},"Al ingresar, aceptas que tus datos se guarden en Firebase (Google)")));
+}
+
+// ── GESTOR AREAS ──────────────────────────────────────────────
+function GestorAreas(props){
+  var areas=props.areas,onSelect=props.onSelect,onAdd=props.onAdd,onRename=props.onRename,
+      onDelete=props.onDelete,onDuplicate=props.onDuplicate,saving=props.saving,
+      lastSaved=props.lastSaved,session=props.session,onLogout=props.onLogout;
+  var se=useState(null);var editId=se[0],setEditId=se[1];
+  var sd=useState("");var draft=sd[0],setDraft=sd[1];
+  var sn=useState("");var newName=sn[0],setNewName=sn[1];
+  var sa=useState(false);var adding=sa[0],setAdding=sa[1];
+
+  return h("div",{style:{minHeight:"100vh",background:"#f4f6fa",padding:"24px 16px"}},
+    h("div",{style:{maxWidth:860,margin:"0 auto"}},
+      h("div",{style:{background:"linear-gradient(135deg,#1a3a6a,#3266ad)",borderRadius:14,padding:"18px 22px",marginBottom:20,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}},
+        h("div",null,
+          h("div",{style:{fontSize:10,opacity:.7,letterSpacing:2,marginBottom:4}},"SISTEMA DE REGISTRO PEDAGÓGICO DIGITAL"),
+          h("div",{style:{fontSize:20,fontWeight:700}},"📚 Mis Áreas"),
+          h("div",{style:{display:"flex",alignItems:"center",gap:8,marginTop:4}},
+            session.photoURL&&h("img",{src:session.photoURL,style:{width:28,height:28,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)"}}),
+            h("div",{style:{fontSize:12,opacity:.85}},session.displayName||session.email))),
+        h("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}},
+          h("div",{style:{fontSize:11,background:"rgba(255,255,255,.15)",borderRadius:6,padding:"3px 10px",color:"#fff"}},
+            saving?h("span",{className:"saving"},"💾 Guardando...")
+            :lastSaved?("✅ Guardado "+lastSaved)
+            :"☁️ Sincronizado"),
+          h("button",{onClick:onLogout,style:{fontSize:11,color:"#fff",background:"rgba(255,0,0,.25)",border:"1px solid rgba(255,255,255,.3)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}},"Cerrar sesión"))),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:14,marginBottom:16}},
+        areas.map(function(m){return h("div",{key:m.id,className:"hover-card",style:{background:"#fff",borderRadius:13,border:"1.5px solid #eee",padding:"16px",cursor:"pointer",position:"relative"},onClick:function(){onSelect(m.id);}},
+          h("div",{style:{width:"100%",height:5,borderRadius:4,background:m.color,marginBottom:12}}),
+          editId===m.id
+          ?h("div",{onClick:function(e){e.stopPropagation();},style:{display:"flex",flexDirection:"column",gap:6}},
+              h(TInput,{value:draft,onChange:setDraft,placeholder:"Nombre"}),
+              h("div",{style:{display:"flex",gap:6}},
+                h(Btn,{accent:true,small:true,onClick:function(){onRename(m.id,draft);setEditId(null);}},"OK"),
+                h(Btn,{small:true,onClick:function(){setEditId(null);}},"✕")))
+          :h(Fragment,null,
+              h("div",{style:{fontSize:15,fontWeight:600,marginBottom:3}},m.curso.modulo),
+              h("div",{style:{fontSize:11,color:"#888",marginBottom:2}},m.curso.maestro||"Sin maestro asignado"),
+              h("div",{style:{fontSize:11,color:"#aaa",marginBottom:10}},(m.students||[]).length+" estudiantes · "+(m.dias||[]).length+" días"),
+              h("div",{style:{display:"flex",flexWrap:"wrap",gap:5}},
+                h("button",{onClick:function(e){e.stopPropagation();onSelect(m.id);},style:{flex:1,padding:"6px 0",fontSize:12,borderRadius:7,border:"none",background:m.color,color:"#fff",cursor:"pointer",fontWeight:600}},"Abrir"),
+                h("button",{onClick:function(e){e.stopPropagation();setDraft(m.curso.modulo);setEditId(m.id);},style:{padding:"5px 8px",fontSize:11,borderRadius:7,border:"0.5px solid #ddd",background:"#f7f8fa",color:"#666",cursor:"pointer"}},"✏"),
+                h("button",{onClick:function(e){e.stopPropagation();onDuplicate(m.id);},style:{padding:"5px 8px",fontSize:11,borderRadius:7,border:"0.5px solid #ddd",background:"#f7f8fa",color:"#666",cursor:"pointer"}},"📋"),
+                h("button",{onClick:function(e){e.stopPropagation();if(areas.length>1&&window.confirm("Eliminar \""+m.curso.modulo+"\"?"))onDelete(m.id);},style:{padding:"5px 8px",fontSize:11,borderRadius:7,border:"0.5px solid #c0392b",background:"#fcebeb",color:"#c0392b",cursor:"pointer"}},"🗑"))));
+        }),
+        h("div",{style:{background:"#f7f8fa",borderRadius:13,border:"2px dashed #ddd",padding:"16px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:160,gap:10}},
+          adding
+          ?h("div",{style:{width:"100%",display:"flex",flexDirection:"column",gap:8}},
+              h(TInput,{value:newName,onChange:setNewName,placeholder:"Nombre del área/módulo"}),
+              h("div",{style:{display:"flex",gap:6}},
+                h(Btn,{accent:true,onClick:function(){if(newName.trim()){onAdd(newName.trim());setNewName("");setAdding(false);}}},"Crear"),
+                h(Btn,{onClick:function(){setAdding(false);setNewName("");}},"Cancelar")))
+          :h("button",{onClick:function(){setAdding(true);},style:{display:"flex",flexDirection:"column",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:"#aaa"}},
+              h("span",{style:{fontSize:32,lineHeight:1}},"+"),
+              h("span",{style:{fontSize:13}},"Nueva área"))))));
+}
+
+// ── REGISTRO AREA (simplificado con tabs principales) ─────────
+function RegistroArea(props){
+  var area=props.area,onUpdate=props.onUpdate,onBack=props.onBack,saving=props.saving,session=props.session;
+  var st=useState(0);var tab=st[0],setTab=st[1];
+  var saz=useState(false);var sortAZ=saz[0],setSortAZ=saz[1];
+  var sec=useState(false);var editCurso=sec[0],setEditCurso=sec[1];
+  var sdc=useState(area.curso);var draftCurso=sdc[0],setDraftCurso=sdc[1];
+  var ssl=useState(area.students[0]?area.students[0].id:null);var selStudent=ssl[0],setSelStudent=ssl[1];
+  var snd=useState("");var newDiaISO=snd[0],setNewDiaISO=snd[1];
+  var sme=useState(false);var menuExport=sme[0],setMenuExport=sme[1];
+  var exportRef=useRef(null);
+  var todayD=new Date();
+  var todayMD=String(todayD.getDate()).padStart(2,"0")+"/"+String(todayD.getMonth()+1).padStart(2,"0");
+
+  var filiacion=area.filiacion||{};
+  var asistPuntos=Number(area.asistPuntos)||ASIST_PUNTOS_DEFAULT;
+  var curso=area.curso,students=area.students,dias=area.dias,acts=area.acts;
+  var asistencia=area.asistencia,notas=area.notas,obs=area.obs||{};
+  var totalPesos=acts.reduce(function(a,x){return a+pesoParsed(x.peso);},0)+asistPuntos;
+
+  var upd=useCallback(function(fn){onUpdate(function(prev){var delta=fn(prev);return Object.assign({},prev,delta);});},[onUpdate]);
+
+  var getAsist=function(sid,d){return asistencia[sid]?asistencia[sid][d]||"🟢":"🟢";};
+  var setAsist=function(sid,d,v){upd(function(p){var na=Object.assign({},p.asistencia);na[sid]=Object.assign({},na[sid]||{});na[sid][d]=v;return{asistencia:na};});};
+  var getNota=function(sid,aid){return notas[sid]?notas[sid][aid]||0:0;};
+  var setNota=function(sid,aid,v){var pesoAct=pesoParsed((acts.find(function(a){return a.id===aid;})||{peso:100}).peso);var val=Math.min(pesoAct,Math.max(0,Number(v)||0));upd(function(p){var nn=Object.assign({},p.notas);nn[sid]=Object.assign({},nn[sid]||{});nn[sid][aid]=val;return{notas:nn};});};
+  var esCumple=function(sid){var fn2=(filiacion[sid]||{}).fechaNac||"";if(!fn2)return false;var p=fn2.split("/");if(p.length<2)return false;return p[0].padStart(2,"0")+"/"+p[1].padStart(2,"0")===todayMD;};
+
+  var addStudent=function(){var s={id:mkId(),nombre:"Nuevo Estudiante",ci:""};upd(function(p){var na=Object.assign({},p.asistencia);na[s.id]=Object.fromEntries(p.dias.map(function(d){return[d,"🟢"];}));var nn=Object.assign({},p.notas);nn[s.id]=Object.fromEntries(p.acts.map(function(a){return[a.id,0];}));var nf=Object.assign({},p.filiacion||{});nf[s.id]=mkFil();return{students:p.students.concat([s]),asistencia:na,notas:nn,filiacion:nf};});};
+  var removeStudent=function(id){upd(function(p){return{students:p.students.filter(function(s){return s.id!==id;})};});};
+  var updateStudent=function(id,f,v){upd(function(p){return{students:p.students.map(function(s){return s.id===id?Object.assign({},s,kv(f,v)):s;})};});};
+  var addDia=function(){upd(function(p){var d=new Date();var base=d.getDate()+"/"+(d.getMonth()+1)+"/"+String(d.getFullYear()).slice(2);var key=p.dias.includes(base)?base+"("+(p.dias.filter(function(x){return x.startsWith(base);}).length+1)+")":base;var na=Object.assign({},p.asistencia);p.students.forEach(function(s){na[s.id]=Object.assign({},na[s.id]||{});if(!na[s.id][key])na[s.id][key]="🟢";});return{dias:p.dias.concat([key]),asistencia:na};});};
+  var addDiaFecha=function(iso){upd(function(p){var parts=iso.split("-");var dd=parseInt(parts[2])+"/"+parseInt(parts[1])+"/"+String(parts[0]).slice(2);var key=p.dias.includes(dd)?dd+"("+(p.dias.filter(function(x){return x.startsWith(dd);}).length+1)+")":dd;var na=Object.assign({},p.asistencia);p.students.forEach(function(s){na[s.id]=Object.assign({},na[s.id]||{});if(!na[s.id][key])na[s.id][key]="🟢";});return{dias:p.dias.concat([key]),asistencia:na};});};
+  var removeDia=function(d){upd(function(p){var na={};Object.keys(p.asistencia).forEach(function(sid){na[sid]=Object.assign({},p.asistencia[sid]);delete na[sid][d];});return{dias:p.dias.filter(function(x){return x!==d;}),asistencia:na};});};
+  var addAct=function(){var a={id:mkId(),nombre:"Actividad "+(acts.length+1),tipo:"Práctica",peso:"10"};upd(function(p){var nn=Object.assign({},p.notas);p.students.forEach(function(s){nn[s.id]=Object.assign({},nn[s.id]||{});nn[s.id][a.id]=0;});return{acts:p.acts.concat([a]),notas:nn};});};
+  var removeAct=function(id){upd(function(p){var nn={};Object.keys(p.notas).forEach(function(sid){nn[sid]=Object.assign({},p.notas[sid]);delete nn[sid][id];});return{acts:p.acts.filter(function(a){return a.id!==id;}),notas:nn};});};
+  var updateAct=function(id,f,v){upd(function(p){return{acts:p.acts.map(function(a){return a.id===id?Object.assign({},a,kv(f,v)):a;})};});};
+  var updFil=function(sid,field,val){upd(function(p){var pf=p.filiacion||{};var sf=Object.assign(mkFil(),pf[sid]||{});sf[field]=val;var newFil=Object.assign({},pf,kv(sid,sf));var nc=([sf.apellidoP,sf.apellidoM,sf.nombres].filter(Boolean).join(" ")||"").trim();var newStudents=p.students.map(function(s){return s.id!==sid?s:(nc?Object.assign({},s,{nombre:nc}):s);});return{filiacion:newFil,students:newStudents};});};
+
+  var sortedStudents=useMemo(function(){var base=students.slice();if(sortAZ)base.sort(function(a,b){return a.nombre.localeCompare(b.nombre,"es",{sensitivity:"base"});});base.sort(function(a,b){var ra=esEstudianteRetirado(a.id,dias,asistencia)?1:0,rb=esEstudianteRetirado(b.id,dias,asistencia)?1:0;return ra-rb;});return base;},[students,sortAZ,dias,asistencia]);
+
+  var statsAsist=useMemo(function(){return students.map(function(s){var notaAsist=calcNotaAsist(s.id,dias,asistencia);var diasActivos=dias.filter(function(d){return!ICON_ES_RETIRADO(getAsist(s.id,d));});var presentes=diasActivos.filter(function(d){return getAsist(s.id,d)==="🟢";}).length;var pct=diasActivos.length>0?Math.round(presentes/diasActivos.length*100):100;return Object.assign({},s,{pct:pct,notaAsist:notaAsist,esRetirado:esEstudianteRetirado(s.id,dias,asistencia)});});},[students,dias,asistencia]);
+  var statsNotas=useMemo(function(){return students.map(function(s){var sa=statsAsist.find(function(x){return x.id===s.id;})||{notaAsist:100};return Object.assign({},s,{notaFinal:calcNotaFinalV2(s.id,acts,notas,sa.notaAsist,asistPuntos),notaAcad:calcNotaAcadV2(s.id,acts,notas),notaAsist:sa.notaAsist,esRetirado:sa.esRetirado});});},[students,acts,notas,statsAsist,asistPuntos]);
+  var statsNotasActivos=useMemo(function(){return statsNotas.filter(function(s){return!s.esRetirado;});},[statsNotas]);
+  var cursoStat=useMemo(function(){if(!statsNotasActivos.length)return{promAsist:0,promNota:0,enRiesgo:0,excelente:0};return{promAsist:Math.round(statsAsist.filter(function(s){return!s.esRetirado;}).reduce(function(a,s){return a+s.pct;},0)/statsNotasActivos.length),promNota:Math.round(statsNotasActivos.reduce(function(a,s){return a+s.notaFinal;},0)/statsNotasActivos.length),enRiesgo:statsNotasActivos.filter(function(s){return s.notaFinal<61;}).length,excelente:statsNotasActivos.filter(function(s){return s.notaFinal>=91;}).length};},[statsAsist,statsNotasActivos]);
+
+  var cumpleHoy=useMemo(function(){return students.filter(function(s){return esCumple(s.id);});},[students,filiacion]);
+
+  useEffect(function(){var fn=function(e){if(exportRef.current&&!exportRef.current.contains(e.target))setMenuExport(false);};document.addEventListener("mousedown",fn);return function(){document.removeEventListener("mousedown",fn);};},[]);
+
+  function exportarExcel(){
+    var wb=XLSX.utils.book_new();
+    var studentsActivos=sortedStudents.filter(function(s){return!esEstudianteRetirado(s.id,dias,asistencia);});
+    var h1=[["Centro Educativo",curso.centroEducativo],["Módulo",curso.modulo],["Maestro/a",curso.maestro],["Gestión",curso.gestion],[],[],[]];
+    h1.push(["N","Nombre","C.I."].concat(acts.map(function(a){return a.nombre+" (max "+a.peso+"pts)";}),["Nota Asist.("+asistPuntos+"pts)","Nota Final %","Nivel"]));
+    studentsActivos.forEach(function(s,i){var na=calcNotaAsist(s.id,dias,asistencia),nFin=calcNotaFinalV2(s.id,acts,notas,na,asistPuntos);h1.push([i+1,s.nombre,s.ci].concat(acts.map(function(a){return getNota(s.id,a.id);}),Math.round(na/100*asistPuntos),nFin+"%",gradeLabel(nFin)));});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(h1),"Nomina y Evaluacion");
+    XLSX.writeFile(wb,curso.modulo+" "+curso.gestion+".xlsx");
+  }
+
+  var tabStyle=function(i){return{padding:"6px 10px",borderRadius:8,border:"none",background:tab===i?area.color:"transparent",color:tab===i?"#fff":"#666",fontWeight:tab===i?600:400,cursor:"pointer",fontSize:11,whiteSpace:"nowrap"};};
+  var tabsLabels=["Inicio","Asistencia","Evaluación","Resumen","Estadísticas","Informe","Planificación","Filiación"];
+
+  return h("div",{style:{maxWidth:980,margin:"0 auto",padding:"14px 10px"}},
+    h("div",{className:"no-print",style:{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}},
+      h("button",{onClick:onBack,style:{padding:"6px 12px",borderRadius:8,border:"0.5px solid #ddd",background:"#fff",color:"#666",cursor:"pointer",fontSize:13}},"← Áreas"),
+      saving?h("span",{className:"saving",style:{fontSize:12,color:"#b07d00",background:"#faeeda",borderRadius:6,padding:"3px 10px"}},"💾 Guardando..."):h("span",{style:{fontSize:12,color:"#2d7a3a",background:"#eaf3de",borderRadius:6,padding:"3px 10px"}},"☁️ Guardado"),
+      h(Btn,{onClick:function(){window.print();}},"🖨 Imprimir"),
+      h("div",{ref:exportRef,style:{position:"relative"}},
+        h("button",{onClick:function(){setMenuExport(function(v){return!v;});},style:{padding:"6px 14px",fontSize:13,borderRadius:7,border:"0.5px solid #2d7a3a",background:"#eaf3de",color:"#2d7a3a",cursor:"pointer",fontWeight:600}},"⬇ Exportar"),
+        menuExport&&h("div",{style:{position:"absolute",top:"110%",right:0,background:"#fff",border:"1px solid #ddd",borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,.13)",zIndex:999,minWidth:220,padding:"6px 0"}},
+          h("button",{onClick:function(){setMenuExport(false);exportarExcel();},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#3266ad"}},"📊 Excel (.xlsx)"),
+          h("button",{onClick:function(){setMenuExport(false);exportarPDFAsistencia(curso,sortedStudents,dias,asistencia);},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#185fa5"}},"📋 PDF Asistencia"),
+          h("button",{onClick:function(){setMenuExport(false);exportarPDFEvaluacion(curso,sortedStudents,acts,notas,asistencia,dias,asistPuntos);},style:{display:"block",width:"100%",padding:"8px 16px",textAlign:"left",fontSize:13,background:"none",border:"none",cursor:"pointer",color:"#7b3fa0"}},"📝 PDF Evaluación"))),
+      h("div",{style:{flex:1,height:4,borderRadius:4,background:area.color,opacity:.4}})),
+
+    h("div",{style:{background:area.color,borderRadius:12,padding:"14px 18px",marginBottom:10,color:"#fff",position:"relative"}},
+      editCurso
+      ?h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+          [["centroEducativo","Centro Educativo"],["etapaCarrera","Etapa/Carrera"],["nivel","Nivel"],["maestro","Maestro/a"],["director","Director/a"],["gestion","Gestión"],["modulo","Módulo/Área"]].map(function(item){return h("div",{key:item[0]},h("div",{style:{fontSize:10,opacity:.7,marginBottom:2}},item[1]),h("input",{value:draftCurso[item[0]]||"",onChange:function(e){var val=e.target.value;setDraftCurso(function(p){return Object.assign({},p,kv(item[0],val));});},style:{width:"100%",fontSize:12,borderRadius:6,border:"1px solid rgba(255,255,255,.4)",background:"rgba(255,255,255,.15)",color:"#fff",padding:"4px 8px",boxSizing:"border-box"}}));}),
+          h("div",{style:{gridColumn:"span 2",display:"flex",gap:8,marginTop:4}},
+            h("button",{onClick:function(){upd(function(){return{curso:draftCurso};});setEditCurso(false);},style:{padding:"5px 14px",borderRadius:7,border:"none",background:"#fff",color:area.color,fontWeight:600,cursor:"pointer",fontSize:12}},"Guardar"),
+            h("button",{onClick:function(){setEditCurso(false);},style:{padding:"5px 14px",borderRadius:7,border:"1px solid rgba(255,255,255,.4)",background:"transparent",color:"#fff",cursor:"pointer",fontSize:12}},"Cancelar")))
+      :h(Fragment,null,
+          h("div",{style:{display:"flex",alignItems:"center",gap:14}},
+            h("div",{style:{fontSize:32}},"📚"),
+            h("div",{style:{flex:1}},
+              h("div",{style:{fontSize:10,opacity:.7,letterSpacing:1,marginBottom:2}},"REGISTRO PEDAGÓGICO DIGITAL"),
+              h("div",{style:{fontSize:16,fontWeight:600}},curso.centroEducativo),
+              h("div",{style:{fontSize:12,opacity:.85,marginTop:3}},curso.etapaCarrera+" - "+curso.nivel+" - Gestión "+curso.gestion),
+              h("div",{style:{fontSize:11,opacity:.7,marginTop:2}},curso.maestro+" - "+curso.modulo))),
+          h("button",{className:"no-print",onClick:function(){setDraftCurso(curso);setEditCurso(true);},style:{position:"absolute",top:12,right:12,background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.4)",color:"#fff",borderRadius:7,padding:"3px 10px",fontSize:11,cursor:"pointer"}},"✏ Editar"))),
+
+    h("div",{className:"no-print",style:{display:"flex",gap:3,flexWrap:"wrap",marginBottom:14,background:"#f0f2f5",padding:5,borderRadius:10}},
+      tabsLabels.map(function(t,i){return h("button",{key:i,style:tabStyle(i),onClick:function(){setTab(i);}},t);})),
+
+    // TAB 0 INICIO
+    tab===0&&h("div",null,
+      cumpleHoy.length>0&&h("div",{style:{background:"#faeeda",borderRadius:10,padding:"10px 14px",marginBottom:10,border:"1px solid #FAC775",display:"flex",alignItems:"center",gap:10}},h("span",{style:{fontSize:22}},"🎂"),h("div",null,h("div",{style:{fontSize:13,fontWeight:700,color:"#b07d00"}},"¡Cumpleaños hoy!"),h("div",{style:{fontSize:12,color:"#7a5700"}},cumpleHoy.map(function(s){return s.nombre;}).join(" · ")))),
+      h("div",{style:card},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}},
+          h("div",{style:{fontSize:14,fontWeight:600}},"Nómina de estudiantes"),
+          h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+            h(Btn,{onClick:function(){setSortAZ(function(v){return!v;});}},sortAZ?"Original":"A→Z"),
+            h("label",null,
+              h("span",{style:{padding:"6px 14px",fontSize:12,borderRadius:7,border:"0.5px solid #3266ad",background:"#e6f1fb",color:"#3266ad",cursor:"pointer",whiteSpace:"nowrap"}},"📂 Importar Excel/CSV"),
+              h("input",{type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:function(e){var file=e.target.files[0];if(!file)return;leerArchivoExcel(file).then(function(rows){var nuevos=parseEstudiantes(rows);if(!nuevos.length){alert("No se encontraron estudiantes.");return;}if(window.confirm("Se encontraron "+nuevos.length+" estudiantes. ¿Agregar?")){upd(function(p){var na=Object.assign({},p.asistencia);nuevos.forEach(function(s){na[s.id]=Object.fromEntries(p.dias.map(function(d){return[d,"🟢"];}));});var nn=Object.assign({},p.notas);nuevos.forEach(function(s){nn[s.id]=Object.fromEntries(p.acts.map(function(a){return[a.id,0];}));});return{students:p.students.concat(nuevos),asistencia:na,notas:nn};});alert("✅ "+nuevos.length+" importados.");}}).catch(function(err){alert("❌ Error: "+err.message);});e.target.value="";}
+            })),
+            h(Btn,{accent:true,onClick:addStudent},"+ Agregar"))),
+        h("table",{style:{width:"100%",fontSize:13,borderCollapse:"collapse"}},
+          h("thead",null,h("tr",{style:{background:"#f7f8fa"}},["N","Nombre","C.I.","Estado","Nota final"].map(function(hh){return h("th",{key:hh,style:{padding:"5px 7px",textAlign:"left",fontWeight:600,color:"#666",fontSize:12}},hh);}))),
+          h("tbody",null,sortedStudents.map(function(s,i){var sn=statsNotas.find(function(x){return x.id===s.id;})||{notaFinal:0};var esRet=esEstudianteRetirado(s.id,dias,asistencia);return h("tr",{key:s.id,className:esRet?"retirado-row":"",style:{borderBottom:"0.5px solid #eee"}},
+            h("td",{style:{padding:"4px 7px",color:"#aaa",fontSize:12}},i+1),
+            h("td",{style:{padding:"3px 5px"}},h(TInput,{value:s.nombre,onChange:function(v){updateStudent(s.id,"nombre",v);},placeholder:"Nombre"})),
+            h("td",{style:{padding:"3px 5px",width:100}},h(TInput,{value:s.ci,onChange:function(v){updateStudent(s.id,"ci",v);},placeholder:"C.I.",style:{width:90}})),
+            h("td",{style:{padding:"4px 7px"}},esRet?h("span",{style:{background:"#f0f0f0",color:"#999",borderRadius:6,padding:"2px 8px",fontSize:10}},"Retirado"):h("span",{style:{background:"#eaf3de",color:"#2d7a3a",borderRadius:6,padding:"2px 8px",fontSize:10}},"Activo")),
+            h("td",{style:{padding:"4px 7px"}},!esRet&&h("span",{style:{background:gradeBg(sn.notaFinal),color:gradeColor(sn.notaFinal),borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600}},sn.notaFinal+"%"),esCumple(s.id)&&h("span",null," 🎂"),
+              h(Btn,{danger:true,small:true,onClick:function(){removeStudent(s.id);}},"✕")));
+          }))))),
+
+    // TAB 1 ASISTENCIA
+    tab===1&&h("div",null,
+      h("div",{style:cardStyle({padding:"10px 12px",marginBottom:10})},
+        h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},ICON_LIST.map(function(ic){var val=ICON_VALORES[ic];return h("div",{key:ic,style:{display:"flex",alignItems:"center",gap:6,background:"#f7f8fa",borderRadius:7,padding:"4px 10px",flex:1,minWidth:120}},h("span",{style:{fontSize:16}},ic),h("span",{style:{fontSize:11,color:"#666",flex:1}},ICON_LABELS[ic].split("(")[0].trim()),val!==null?h("span",{style:{background:gradeBg(val),color:gradeColor(val),borderRadius:5,padding:"1px 6px",fontSize:10,fontWeight:600}},val+"%"):h("span",{style:{background:"#f0f0f0",color:"#aaa",borderRadius:5,padding:"1px 6px",fontSize:10}},"-"));})),
+        h("div",{style:{marginTop:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
+          h("span",{style:{fontSize:11,color:"#185fa5",fontWeight:600}},"Puntos de asistencia:"),
+          h("input",{type:"number",min:1,max:50,value:area.asistPuntos||ASIST_PUNTOS_DEFAULT,onChange:function(e){upd(function(){return{asistPuntos:e.target.value};});},style:{width:60,fontSize:13,fontWeight:700,border:"1px solid #185fa5",borderRadius:6,padding:"3px 7px",textAlign:"center",color:"#185fa5",MozAppearance:"textfield"}}))),
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:6}},
+        h("div",{style:{fontSize:13,fontWeight:600}},"Registro diario"),
+        h("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}},
+          h(Btn,{onClick:function(){setSortAZ(function(v){return!v;});}},sortAZ?"Original":"A→Z"),
+          h("input",{type:"date",value:newDiaISO,onChange:function(e){setNewDiaISO(e.target.value);},style:{fontSize:11,border:"0.5px solid #ddd",borderRadius:6,padding:"4px 8px",cursor:"pointer"}}),
+          h(Btn,{accent:true,onClick:function(){if(newDiaISO){addDiaFecha(newDiaISO);setNewDiaISO("");}else addDia();}},"+ Agregar día"))),
+      h("div",{style:{overflowX:"auto",borderRadius:10,border:"0.5px solid #e0e0e0",background:"#fff"}},
+        h("table",{className:"freeze-table",style:{minWidth:(dias.length*100+280)+"px",width:"100%"}},
+          h("thead",null,h("tr",{style:{background:"#f7f8fa"}},
+            h("th",{className:"col-num",style:{padding:"4px 5px",textAlign:"left",color:"#666",borderBottom:"2px solid #ddd"}},"N"),
+            h("th",{className:"col-name",style:{padding:"4px 5px",textAlign:"left",color:"#666",borderBottom:"2px solid #ddd",borderRight:"2px solid #e0e0e0"}},"Estudiante"),
+            dias.map(function(d,dIdx){return h("th",{key:d,style:{padding:"3px 1px",minWidth:85,textAlign:"center",borderBottom:"2px solid #ddd"}},
+              h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+                h("span",{style:{fontSize:10,color:"#555",fontWeight:600}},d),
+                h("button",{onClick:function(){removeDia(d);},style:{fontSize:8,color:"#c0392b",background:"none",border:"none",cursor:"pointer",padding:0}},"✕")));}),
+            h("th",{style:{padding:"4px 5px",color:"#666",minWidth:58,textAlign:"center",borderBottom:"2px solid #ddd"}},"% Asist."),
+            h("th",{style:{padding:"4px 5px",color:"#185fa5",fontWeight:600,minWidth:70,textAlign:"center",borderBottom:"2px solid #ddd"}},"Nota Asist."))),
+          h("tbody",null,sortedStudents.map(function(s,i){var st=statsAsist.find(function(x){return x.id===s.id;})||{pct:0,notaAsist:0};var esRet=st.esRetirado;return h("tr",{key:s.id,className:esRet?"retirado-row":"",style:{background:esRet?"#f5f5f5":i%2===0?"#fff":"#f9fbff"}},
+            h("td",{className:"col-num",style:{padding:"3px 5px",color:"#aaa",background:"transparent"}},i+1),
+            h("td",{className:"col-name",style:{padding:"3px 5px",fontSize:12,background:"transparent",borderRight:"2px solid #e0e0e0"}},s.nombre,esCumple(s.id)&&!esRet&&h("span",null,"🎂"),esRet&&h("span",{style:{marginLeft:5,fontSize:10,color:"#aaa"}},"R")),
+            dias.map(function(d){var ic=getAsist(s.id,d);var val=ICON_VALORES[ic];var bg=ic==="⭕"?"#f0f0f0":val===100?"#eaf3de":val>=90?"#faeeda":val>=40?"#fff3cd":"#fcebeb";return h("td",{key:d,style:{padding:"2px 1px",textAlign:"center",background:bg}},h("select",{value:ic,onChange:function(e){setAsist(s.id,d,e.target.value);},style:{fontSize:14,border:"none",background:"transparent",cursor:"pointer",width:36}},ICON_LIST.map(function(x){return h("option",{key:x,value:x},x);})),val!==null?h("div",{style:{fontSize:8,color:gradeColor(val),textAlign:"center"}},val):h("div",{style:{fontSize:8,color:"#bbb",textAlign:"center"}},"-"));}),
+            h("td",{style:{padding:"3px 5px",textAlign:"center"}},!esRet?h("span",{style:{background:gradeBg(st.pct),color:gradeColor(st.pct),borderRadius:5,padding:"1px 6px",fontWeight:600,fontSize:11}},st.pct+"%"):h("span",{style:{color:"#bbb",fontSize:11}},"-")),
+            h("td",{style:{padding:"3px 5px",textAlign:"center"}},!esRet?h("span",{style:{background:gradeBg(st.notaAsist),color:gradeColor(st.notaAsist),borderRadius:5,padding:"1px 6px",fontWeight:600,fontSize:11}},st.notaAsist+"%"):h("span",{style:{color:"#bbb",fontSize:11}},"R")));
+          })))),
+      pieFirmaEl(curso,upd)),
+
+    // TAB 2 EVALUACION
+    tab===2&&h("div",null,
+      h("div",{style:{background:"#f0f7ff",borderRadius:8,padding:"10px 14px",marginBottom:10,border:"1px solid #b5d4f4",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}},
+        h("div",null,h("div",{style:{fontSize:12,fontWeight:700,color:"#185fa5"}},"Sistema de puntuación"),h("div",{style:{fontSize:11,color:"#3266ad"}},"Total: "+totalPesos+" pts → Nota Final = (suma / "+totalPesos+") × 100")),
+        h(Btn,{accent:true,onClick:addAct},"+ Actividad")),
+      h("div",{style:{overflowX:"auto",borderRadius:10,border:"0.5px solid #e0e0e0",background:"#fff"}},
+        h("table",{className:"freeze-table",style:{minWidth:(acts.length*130+290)+"px",width:"100%"}},
+          h("thead",null,h("tr",{style:{background:"#f7f8fa"}},
+            h("th",{className:"col-num",style:{padding:"4px 5px",textAlign:"left",color:"#666",borderBottom:"2px solid #ddd"}},"N"),
+            h("th",{className:"col-name",style:{padding:"4px 5px",textAlign:"left",color:"#666",borderBottom:"2px solid #ddd",borderRight:"2px solid #e0e0e0"}},"Estudiante"),
+            acts.map(function(a,i){return h("th",{key:a.id,style:{padding:"4px 3px",fontWeight:600,color:ACT_COLORS[i%ACT_COLORS.length],minWidth:90,textAlign:"center",borderBottom:"2px solid #ddd"}},
+              h("div",{style:{display:"flex",flexDirection:"column",gap:2}},
+                h("input",{value:a.nombre,onChange:function(e){updateAct(a.id,"nombre",e.target.value);},style:{fontSize:10,fontWeight:600,border:"none",borderBottom:"1px solid "+ACT_COLORS[i%ACT_COLORS.length],background:"transparent",outline:"none",textAlign:"center",width:"100%",color:ACT_COLORS[i%ACT_COLORS.length]}}),
+                h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:3}},
+                  h("span",{style:{fontSize:9,color:"#aaa"}},"max"),
+                  h("input",{type:"number",min:1,max:100,value:a.peso,onChange:function(e){updateAct(a.id,"peso",e.target.value);},style:{width:36,fontSize:11,fontWeight:700,border:"1px solid "+ACT_COLORS[i%ACT_COLORS.length],borderRadius:4,padding:"1px 3px",textAlign:"center",color:ACT_COLORS[i%ACT_COLORS.length],MozAppearance:"textfield"}}),
+                  h("span",{style:{fontSize:9,color:"#aaa"}},"pts")),
+                h("button",{onClick:function(){removeAct(a.id);},style:{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:10}},"✕ quitar")));}),
+            h("th",{style:{padding:"4px 3px",fontWeight:600,color:"#185fa5",minWidth:80,textAlign:"center",borderBottom:"2px solid #ddd"}},"Asistencia",h("br"),h("span",{style:{fontWeight:400,fontSize:9,color:"#aaa"}},"/ "+asistPuntos+" pts")),
+            h("th",{style:{padding:"4px 5px",fontWeight:600,color:area.color,minWidth:80,textAlign:"center",borderBottom:"2px solid #ddd"}},"Nota Final",h("br"),h("span",{style:{fontWeight:400,fontSize:9,color:"#aaa"}},"sobre 100")))),
+          h("tbody",null,sortedStudents.map(function(s,i){var sn=statsNotas.find(function(x){return x.id===s.id;})||{notaFinal:0};var sa=statsAsist.find(function(x){return x.id===s.id;})||{notaAsist:0};var esRet=sa.esRetirado,ptsAsist=Math.round(sa.notaAsist/100*asistPuntos);return h("tr",{key:s.id,className:esRet?"retirado-row":"",style:{background:esRet?"#f5f5f5":i%2===0?"#fff":"#f9fbff"}},
+            h("td",{className:"col-num",style:{padding:"3px 5px",color:"#aaa",background:"transparent"}},i+1),
+            h("td",{className:"col-name",style:{padding:"3px 5px",fontSize:12,background:"transparent",borderRight:"2px solid #e0e0e0"}},s.nombre),
+            acts.map(function(a,idx){var pesoAct=pesoParsed(a.peso),val=getNota(s.id,a.id),pct=pesoAct>0?Math.round(val/pesoAct*100):0;return h("td",{key:a.id,style:{padding:"3px",textAlign:"center"}},h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:1}},h("input",{type:"number",min:0,max:pesoAct,value:val,onChange:function(e){setNota(s.id,a.id,e.target.value);},className:"nota-inp",style:{border:"1px solid "+ACT_COLORS[idx%ACT_COLORS.length]+"60",opacity:esRet?.5:1}}),h("div",{style:{fontSize:8,color:gradeColor(pct),fontWeight:600}},pct+"%")));}),
+            h("td",{style:{padding:"3px",textAlign:"center"}},!esRet?h("span",{style:{background:"#e6f1fb",color:gradeColor(sa.notaAsist),borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:600}},ptsAsist+" pts"):h("span",{style:{color:"#ccc",fontSize:11}},"-")),
+            h("td",{style:{padding:"3px 5px",textAlign:"center"}},!esRet?h("span",{style:{background:gradeBg(sn.notaFinal),color:gradeColor(sn.notaFinal),borderRadius:5,padding:"4px 10px",fontWeight:700,fontSize:14}},sn.notaFinal+"%"):h("span",{style:{color:"#bbb",fontSize:12}},"Retirado")));
+          })))),
+      pieFirmaEl(curso,upd)),
+
+    // TAB 3 RESUMEN
+    tab===3&&h("div",null,
+      !students.length&&h("div",{style:{textAlign:"center",padding:24,color:"#aaa"}},"Agrega estudiantes desde Inicio."),
+      sortedStudents.map(function(s,i){var sa=statsAsist.find(function(x){return x.id===s.id;})||{pct:0,notaAsist:0,esRetirado:false};var sn=statsNotas.find(function(x){return x.id===s.id;})||{notaFinal:0,notaAcad:0};if(sa.esRetirado)return h("div",{key:s.id,style:cardStyle({borderLeft:"4px solid #ccc",opacity:.6})},h("div",{style:{fontWeight:600,fontSize:13,color:"#999"}},(i+1)+". "+s.nombre+" — Retirado/a"));return h("div",{key:s.id,style:cardStyle({borderLeft:"4px solid "+gradeColor(sn.notaFinal)})},h("div",{style:{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6,alignItems:"center",marginBottom:6}},h("div",null,h("div",{style:{fontWeight:600,fontSize:13}},(i+1)+". "+s.nombre),h("div",{style:{fontSize:11,color:"#888"}},"C.I.: "+(s.ci||"-"))),h("span",{style:{background:gradeBg(sn.notaFinal),color:gradeColor(sn.notaFinal),borderRadius:6,padding:"2px 10px",fontWeight:600,fontSize:11}},gradeLabel(sn.notaFinal))),h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},mc("% Presencia",sa.pct+"%",gradeColor(sa.pct)),mc("Nota asistencia",sa.notaAsist+"%",gradeColor(sa.notaAsist)),mc("Nota académica",sn.notaAcad+"%",gradeColor(sn.notaAcad)),mc("Nota final",sn.notaFinal+"%",gradeColor(sn.notaFinal))));})),
+
+    // TAB 4 ESTADISTICAS
+    tab===4&&h("div",null,
+      h("div",{style:{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}},mc("Prom. asistencia",cursoStat.promAsist+"%",gradeColor(cursoStat.promAsist)),mc("Prom. nota final",cursoStat.promNota+"%",gradeColor(cursoStat.promNota)),mc("Excelentes (91%+)",cursoStat.excelente,"#1a6e2e"),mc("En riesgo (<61%)",cursoStat.enRiesgo,cursoStat.enRiesgo>0?"#c0392b":"#2d7a3a")),
+      h("div",{style:card},
+        h("div",{style:{fontSize:13,fontWeight:600,marginBottom:8}},"Nota final por estudiante"),
+        statsNotasActivos.slice().sort(function(a,b){return b.notaFinal-a.notaFinal;}).map(function(s){return h("div",{key:s.id,style:{marginBottom:8}},h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}},h("span",{style:{color:"#666"}},s.nombre),h("span",{style:{fontWeight:600,color:gradeColor(s.notaFinal)}},s.notaFinal+"%")),h("div",{style:{height:8,background:"#f0f0f0",borderRadius:4,overflow:"hidden"}},h("div",{style:{height:"100%",width:s.notaFinal+"%",background:gradeColor(s.notaFinal),borderRadius:4}})));}))),
+
+    // TAB 5 INFORME
+    tab===5&&h("div",null,
+      h("div",{style:{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap"}},
+        h("label",{style:{fontSize:12,color:"#666"}},"Estudiante:"),
+        h("select",{value:selStudent||"",onChange:function(e){setSelStudent(e.target.value);},style:{fontSize:12,borderRadius:7,padding:"4px 8px",border:"0.5px solid #ddd",background:"#fff"}},students.map(function(s){return h("option",{key:s.id,value:s.id},s.nombre);})),
+        h(Btn,{onClick:function(){window.print();}},"🖨 Imprimir")),
+      selStudent&&(function(){var s=students.find(function(x){return x.id===selStudent;});var sa=statsAsist.find(function(x){return x.id===selStudent;})||{pct:0,notaAsist:0};var sn=statsNotas.find(function(x){return x.id===selStudent;})||{notaFinal:0,notaAcad:0};var fil=filiacion[selStudent]||mkFil();if(!s)return null;return h("div",{style:cardStyle({border:"1px solid #ddd"})},h("div",{style:{textAlign:"center",borderBottom:"0.5px solid #eee",paddingBottom:10,marginBottom:12}},h("div",{style:{fontSize:14,fontWeight:700}},curso.centroEducativo),h("div",{style:{fontSize:11,color:"#666"}},curso.modulo+" - Gestión "+curso.gestion)),h("div",{style:{marginBottom:12}},h("div",{style:{fontSize:14,fontWeight:600}},s.nombre),h("div",{style:{fontSize:11,color:"#888"}},"C.I.: "+(s.ci||"-")),fil.comunidad&&h("div",{style:{fontSize:11,color:"#888"}},"Comunidad: "+fil.comunidad)),h("div",{style:{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}},mc("% Presencia",sa.pct+"%",gradeColor(sa.pct)),mc("Nota asistencia",sa.notaAsist+"%",gradeColor(sa.notaAsist)),mc("Nota académica",sn.notaAcad+"%",gradeColor(sn.notaAcad)),mc("Nota final",sn.notaFinal+"%",gradeColor(sn.notaFinal))),acts.map(function(a,i){var n=getNota(selStudent,a.id),pesoAct=pesoParsed(a.peso),pct=pesoAct>0?Math.round(n/pesoAct*100):0;return h("div",{key:a.id,style:{display:"flex",alignItems:"center",gap:7,marginBottom:5}},h("span",{style:{fontSize:11,color:"#666",minWidth:130}},a.nombre+" (max "+pesoAct+")"),h("div",{style:{flex:1,height:7,background:"#f0f0f0",borderRadius:3,overflow:"hidden"}},h("div",{style:{height:"100%",width:pct+"%",background:ACT_COLORS[i%ACT_COLORS.length],borderRadius:3}})),h("span",{style:{fontSize:11,fontWeight:600,color:gradeColor(pct),minWidth:52}},n+"/"+pesoAct));}),h("div",{style:{marginTop:8,textAlign:"right"}},h("span",{style:{background:gradeBg(sn.notaFinal),color:gradeColor(sn.notaFinal),borderRadius:7,padding:"5px 16px",fontWeight:700,fontSize:18}},sn.notaFinal+"%")),h("div",{style:{marginTop:10}},h("div",{style:{fontSize:12,fontWeight:600,marginBottom:4}},"Observaciones"),h("textarea",{value:obs[selStudent]||"",onChange:function(e){upd(function(p){return{obs:Object.assign({},p.obs,kv(selStudent,e.target.value))};});},placeholder:"Observaciones pedagógicas...",rows:3,style:{width:"100%",fontSize:12,borderRadius:7,border:"0.5px solid #ddd",padding:"6px 9px",resize:"vertical",boxSizing:"border-box"}})),pieFirmaEl(curso,upd));})()), 
+
+    // TAB 6 PLANIFICACION
+    tab===6&&h("div",null,
+      (area.documentos||[]).map(function(doc){return h("div",{key:doc.id,style:cardStyle({borderLeft:"4px solid "+area.color})},
+        h("div",{style:{fontSize:12,fontWeight:600,color:area.color,marginBottom:8}},doc.tipo),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:8,marginBottom:8}},
+          h("div",null,h("div",{style:{fontSize:10,color:"#888",marginBottom:2}},"Nombre"),h(TInput,{value:doc.nombre,onChange:function(v){upd(function(p){return{documentos:(p.documentos||[]).map(function(d){return d.id===doc.id?Object.assign({},d,{nombre:v}):d;})};});},placeholder:"Nombre"})),
+          h("div",null,h("div",{style:{fontSize:10,color:"#888",marginBottom:2}},"Fecha inicio"),h("input",{type:"date",value:doc.fechaInicio||"",onChange:function(e){upd(function(p){return{documentos:(p.documentos||[]).map(function(d){return d.id===doc.id?Object.assign({},d,{fechaInicio:e.target.value}):d;})};});},style:{width:"100%",fontSize:12,border:"0.5px solid #ddd",borderRadius:7,padding:"4px 8px",cursor:"pointer"}})),
+          h("div",null,h("div",{style:{fontSize:10,color:"#888",marginBottom:2}},"Fecha fin"),h("input",{type:"date",value:doc.fechaFin||"",onChange:function(e){upd(function(p){return{documentos:(p.documentos||[]).map(function(d){return d.id===doc.id?Object.assign({},d,{fechaFin:e.target.value}):d;})};});},style:{width:"100%",fontSize:12,border:"0.5px solid #ddd",borderRadius:7,padding:"4px 8px",cursor:"pointer"}}))),
+        h("div",null,h("div",{style:{fontSize:10,color:"#888",marginBottom:2}},"URL / Enlace"),h(TInput,{value:doc.urlPlan||"",onChange:function(v){upd(function(p){return{documentos:(p.documentos||[]).map(function(d){return d.id===doc.id?Object.assign({},d,{urlPlan:v}):d;})};});},placeholder:"https://..."}))); })),
+
+    // TAB 7 FILIACION
+    tab===7&&h("div",null,
+      h("div",{style:{background:"linear-gradient(135deg,#1a3a6a,#3266ad)",borderRadius:12,padding:"14px 18px",marginBottom:14,color:"#fff"}},
+        h("div",{style:{fontSize:14,fontWeight:700}},"Fichas de Filiación Personal"),
+        h("div",{style:{fontSize:11,opacity:.85,marginTop:2}},"Datos personales de cada estudiante — guardados en la nube ☁️")),
+      !students.length&&h("div",{style:{textAlign:"center",padding:24,color:"#aaa",fontSize:12}},"Agrega estudiantes desde Inicio."),
+      sortedStudents.map(function(s,i){var fil=filiacion[s.id]||mkFil(),cumple=esCumple(s.id);return h("div",{key:s.id,style:cardStyle({borderLeft:"4px solid "+(cumple?"#FAC775":area.color)})},
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
+          h("div",{style:{flex:1}},
+            h("div",{style:{fontWeight:600,fontSize:13}},s.nombre,cumple&&h("span",{style:{marginLeft:5}},"🎂")),
+            h("div",{style:{fontSize:11,color:"#888"}},"C.I.: "+(s.ci||"-")+" · Estudiante "+(i+1)))),
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10,background:"#f0f7ff",borderRadius:8,padding:"8px 10px",border:"1px solid #dbeafe"}},
+          h("div",null,h("div",{style:{fontSize:10,color:"#3266ad",fontWeight:600,marginBottom:2}},"Apellido Paterno"),h(TInput,{value:fil.apellidoP||"",onChange:function(v){updFil(s.id,"apellidoP",v);},placeholder:"Apellido paterno"})),
+          h("div",null,h("div",{style:{fontSize:10,color:"#3266ad",fontWeight:600,marginBottom:2}},"Apellido Materno"),h(TInput,{value:fil.apellidoM||"",onChange:function(v){updFil(s.id,"apellidoM",v);},placeholder:"Apellido materno"})),
+          h("div",null,h("div",{style:{fontSize:10,color:"#3266ad",fontWeight:600,marginBottom:2}},"Nombre(s)"),h(TInput,{value:fil.nombres||"",onChange:function(v){updFil(s.id,"nombres",v);},placeholder:"Nombres"}))),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:10}},
+          [["fechaNac","Fecha de nacimiento","DD/MM/AAAA"],["telefono","Teléfono / Celular","70000000"],["email","Correo electrónico","correo@ejemplo.com"],["comunidad","Comunidad","Nombre de la comunidad"],["direccion","Dirección / Domicilio","Barrio, calle, número"],["apoderado","Nombre del apoderado","Nombre completo"],["telApoderado","Teléfono del apoderado","70000001"]].map(function(item){return h("div",{key:item[0]},h("div",{style:{fontSize:10,color:"#888",marginBottom:2}},item[1]),h(TInput,{value:fil[item[0]]||"",onChange:function(v){updFil(s.id,item[0],v);},placeholder:item[2]}));})),
+        h("div",{style:{marginTop:10}},h("div",{style:{fontSize:10,color:"#888",marginBottom:2}},"Observaciones"),h("textarea",{value:fil.obs||"",onChange:function(e){updFil(s.id,"obs",e.target.value);},rows:2,style:{width:"100%",fontSize:12,borderRadius:7,border:"0.5px solid #ddd",padding:"6px 9px",background:"#fff",resize:"vertical",boxSizing:"border-box"}}))); })));
+}
+
+// ── APP PRINCIPAL ─────────────────────────────────────────────
+function App(){
+  var ss=useState(null);var session=ss[0],setSession=ss[1];
+  var sA=useState([]);var areas=sA[0],setAreas=sA[1];
+  var sI=useState(null);var selId=sI[0],setSelId=sI[1];
+  var sSv=useState(false);var saving=sSv[0],setSaving=sSv[1];
+  var sLs=useState(null);var lastSaved=sLs[0],setLastSaved=sLs[1];
+  var sErr=useState("");var authError=sErr[0],setAuthError=sErr[1];
+  var sLd=useState(true);var loading=sLd[0],setLoading=sLd[1];
+  var sFbR=useState(false);var fbReady=sFbR[0],setFbReady=sFbR[1];
+  var saveTimer=useRef(null);
+  var pendingAreas=useRef(null);
+
+  // Esperar Firebase
+  useEffect(function(){
+    if(window._FB_READY){setFbReady(true);return;}
+    var h2=function(){setFbReady(true);};
+    window.addEventListener("fb_ready",h2);
+    return function(){window.removeEventListener("fb_ready",h2);};
+  },[]);
+
+  // Auth listener
+  useEffect(function(){
+    if(!fbReady)return;
+    var FB=window._FB;
+    var unsub=FB.onAuthStateChanged(FB.auth,function(user){
+      if(user){setSession(user);loadAreas(user);}
+      else{setSession(false);setLoading(false);}
+    });
+    return unsub;
+  },[fbReady]);
+
+  var loadAreas=function(user){
+    var FB=window._FB;
+    FB.getDoc(FB.doc(FB.db,"users",user.uid)).then(function(snap){
+      if(snap.exists()){
+        var data=snap.data();
+        var arr=data.areas||[];
+        if(!arr.length)arr=[mkArea("Matemáticas",user.displayName),mkArea("Lenguaje",user.displayName),mkArea("Ciencias",user.displayName)];
+        setAreas(arr.map(function(m){return migrateArea(m,user.displayName);}));
+      }else{
+        var def=[mkArea("Matemáticas",user.displayName),mkArea("Lenguaje",user.displayName),mkArea("Ciencias",user.displayName)];
+        setAreas(def);
+        FB.setDoc(FB.doc(FB.db,"users",user.uid),{areas:def,email:user.email,nombre:user.displayName});
+      }
+      setLoading(false);
+    }).catch(function(e){console.error(e);setLoading(false);});
+  };
+
+  var persistAreas=useCallback(function(newAreas){
+    pendingAreas.current=newAreas;
+    if(saveTimer.current)clearTimeout(saveTimer.current);
+    setSaving(true);
+    saveTimer.current=setTimeout(function(){
+      var toSave=pendingAreas.current;
+      if(!toSave||!session){setSaving(false);return;}
+      pendingAreas.current=null;
+      var FB=window._FB;
+      FB.setDoc(FB.doc(FB.db,"users",session.uid),{areas:toSave,email:session.email,nombre:session.displayName},{merge:true}).then(function(){
+        setSaving(false);setLastSaved(new Date().toLocaleTimeString("es-BO"));
+      }).catch(function(e){setSaving(false);console.error("Error guardando:",e);});
+    },1200);
+  },[session]);
+
+  var handleGoogle=function(){
+    setAuthError("");setLoading(true);
+    var FB=window._FB;
+    FB.signInWithPopup(FB.auth,FB.provider).catch(function(e){setAuthError(e.message);setLoading(false);});
+  };
+
+  var handleLogout=function(){
+    var FB=window._FB;
+    FB.signOut(FB.auth).then(function(){setSession(false);setAreas([]);setSelId(null);});
+  };
+
+  var updateArea=useCallback(function(id,fn){
+    setAreas(function(prev){var next=prev.map(function(m){return m.id===id?fn(m):m;});persistAreas(next);return next;});
+  },[persistAreas]);
+
+  var addArea=function(n){var m=mkArea(n,session?session.displayName:"");setAreas(function(prev){var next=prev.concat([m]);persistAreas(next);return next;});setSelId(m.id);};
+  var renameArea=function(id,n){setAreas(function(prev){var next=prev.map(function(m){return m.id===id?Object.assign({},m,{curso:Object.assign({},m.curso,{modulo:n})}):m;});persistAreas(next);return next;});};
+  var deleteArea=function(id){setAreas(function(prev){var next=prev.filter(function(m){return m.id!==id;});persistAreas(next);return next;});};
+  var duplicateArea=function(id){setAreas(function(prev){var orig=prev.find(function(m){return m.id===id;});if(!orig)return prev;var nuevo=Object.assign({},JSON.parse(JSON.stringify(orig)),{id:mkId(),color:ACT_COLORS[Math.floor(Math.random()*ACT_COLORS.length)]});nuevo.curso.modulo=orig.curso.modulo+" (copia)";var next=prev.concat([nuevo]);persistAreas(next);return next;});};
+
+  if(!fbReady||loading)return h("div",{className:"login-wrap"},h("div",{style:{textAlign:"center",color:"#fff"}},h("div",{style:{fontSize:52,marginBottom:12}},"📚"),h("div",{style:{fontSize:16,fontWeight:600}},"Registro Pedagógico Digital"),h("div",{style:{fontSize:12,opacity:.7,marginTop:8}},"Conectando con Firebase...")));
+  if(session===false)return h(LoginScreen,{onGoogle:handleGoogle,loading:loading,error:authError});
+
+  var area=areas.find(function(m){return m.id===selId;});
+  if(selId&&area)return h(RegistroArea,{area:area,onUpdate:function(fn){updateArea(selId,fn);},onBack:function(){setSelId(null);},saving:saving,session:session});
+  return h(GestorAreas,{areas:areas,onSelect:setSelId,onAdd:addArea,onRename:renameArea,onDelete:deleteArea,onDuplicate:duplicateArea,saving:saving,lastSaved:lastSaved,session:session,onLogout:handleLogout});
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App,null));
+</script>
+</body>
+</html>
